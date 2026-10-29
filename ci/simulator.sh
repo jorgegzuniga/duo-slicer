@@ -134,7 +134,7 @@ inner)
   ;;
 unfold)
   # The simulator boots the iPhone Duo folded (outer screen on, inner screen dark) and simctl can't unfold it,
-  # so try the posture controls in Device Hub through System Events, then shoot the inner screen.
+  # so press "open" in the posture bar Device Hub shows under the device, then shoot the inner screen.
   udid=$(pick "^iPhone Duo$")
   [ -z "$udid" ] && { echo "no iPhone Duo simulator"; exit 0; }
   boot "$udid"
@@ -145,24 +145,6 @@ unfold)
   read -r OUTER INNER <<< "$(screens shots/duo-screens.txt | awk '{print $1}' | xargs)"
   OUTER=${OUTER:-1}; INNER=${INNER:-3}
   note "outer screen $OUTER, inner screen $INNER"
-  X=$(xcode-select -p)
-  XA=${X%/Contents/Developer}
-  {
-    echo "== simctl help ui"; limit 30 xcrun simctl help ui
-    echo "== apps in Xcode"; find "$XA/Contents" -maxdepth 5 -name "*.app" -prune 2>/dev/null | grep -v "/Frameworks/" | head -40
-    echo "== iPhone Duo device type"
-    xcrun simctl list devicetypes -j | python3 -c 'import json,sys; [print(t["bundlePath"]) for t in json.load(sys.stdin)["devicetypes"] if "Duo" in t["name"]]' | while IFS= read -r b; do
-      echo "-- $b"; find "$b" -maxdepth 3 | head -40
-      find "$b" -maxdepth 3 -name "*.plist" | while IFS= read -r f; do echo "--- $f"; plutil -p "$f" 2>&1 | head -250; done
-    done
-    echo "== posture symbols"
-    for bin in "$X/Library/PrivateFrameworks/SimulatorKit.framework/SimulatorKit" /Library/Developer/PrivateFrameworks/CoreSimulator.framework/CoreSimulator "$(xcrun -f simctl)"; do
-      echo "-- $bin"
-      nm -gU "$bin" 2>/dev/null | grep -iE "posture|hinge|fold|crease" | head -80
-      strings -a "$bin" 2>/dev/null | grep -iE "posture|hinge|unfold|folded|foldstate" | sort -u | head -80
-    done
-    echo "== private posture methods"; limit 180 swift ci/sim-posture.swift list
-  } >> "$P" 2>&1
   inner_lit() {  # screenshot the inner screen; true when it isn't dark
     limit 45 xcrun simctl io "$udid" screenshot --display="$INNER" "$1" > /dev/null 2>&1
     local size
@@ -170,56 +152,35 @@ unfold)
     note "  inner screen: $size bytes"
     [ "$size" -gt 130000 ]
   }
-  unfolded=""
+  X=$(xcode-select -p)
+  XA=${X%/Contents/Developer}
   # Xcode 27's Simulator is DeviceHub.app (Xcode > Open Developer Tool > Device Hub)
   hub=$(find "$XA/Contents" -maxdepth 5 \( -name "DeviceHub.app" -o -name "Device Hub.app" \) -prune 2>/dev/null | head -1)
-  [ -z "$hub" ] && hub=$(find "$XA/Contents" -maxdepth 5 -name "Simulator.app" -prune 2>/dev/null | head -1)
   note "device app: ${hub:-none}"
-  {
-    echo "== guest frameworks named like posture, hinge or fold"
-    rt=$(xcrun simctl list runtimes -j | python3 -c 'import json,sys; [print(r["bundlePath"]) for r in json.load(sys.stdin)["runtimes"] if r.get("version","").startswith("27.1")]' | head -1)
-    root="$rt/Contents/Resources/RuntimeRoot"
-    echo "runtime root: $root"
-    find "$root/System/Library/PrivateFrameworks" "$root/System/Library/Frameworks" -maxdepth 1 \( -iname "*posture*" -o -iname "*hinge*" -o -iname "*fold*" \) 2>/dev/null | head -20
-    find "$root" -maxdepth 6 -iname "*SimulatorBridge*" 2>/dev/null | head -5 | while IFS= read -r f; do
-      echo "-- $f"
-      b=$f; [ -d "$f" ] && b="$f/$(defaults read "$f/Info" CFBundleExecutable 2>/dev/null)"
-      strings -a "$b" 2>/dev/null | grep -iE "posture|hinge|fold" | sort -u | head -40
-    done
-  } >> "$P" 2>&1
+  unfolded=""
   if [ -n "$hub" ]; then
     bid=$(defaults read "$hub/Contents/Info" CFBundleIdentifier 2>/dev/null)
-    {
-      echo "== $hub ($bid)"
-      find "$hub/Contents" -maxdepth 3 -not -path "*.lproj*" | head -60
-      echo "== posture strings and symbols in Device Hub"
-      find "$hub/Contents" -type f 2>/dev/null | while IFS= read -r f; do
-        file -b "$f" 2>/dev/null | grep -q Mach-O || continue
-        hits=$(strings -a "$f" 2>/dev/null | grep -iE "posture|hinge|unfold|folded|foldstate|crease|lidangle|lid angle" | sort -u | head -60)
-        syms=$(nm -gU "$f" 2>/dev/null | grep -iE "posture|hinge|fold" | awk '{print $NF}' | xcrun swift-demangle --simplified 2>/dev/null | sort -u | head -40)
-        [ -n "$hits$syms" ] && { echo "-- $f"; echo "$hits"; echo "$syms"; }
-      done
-    } >> "$P" 2>&1
     open -a "$hub" >> "$P" 2>&1
     sleep 30
     screencapture -x shots/mac-1.png >> "$P" 2>&1
-    { echo "== UI"; limit 180 osascript -l JavaScript ci/device-hub.js dump "$bid"; } >> "$P" 2>&1
-    note "menu:"; limit 60 osascript -l JavaScript ci/device-hub.js click-menu "$bid" 2>&1 | tee -a "$P"
+    { echo "== UI"; limit 240 osascript -l JavaScript ci/device-hub.js dump "$bid"; } >> "$P" 2>&1
+    note "menu:"; limit 90 osascript -l JavaScript ci/device-hub.js click-menu "$bid" 2>&1 | tee -a "$P"
     sleep 8
     inner_lit shots/unfold-menu.png && unfolded=menu
-    for i in 0 1 2 3 4 5; do
+    for i in 0 1 2; do
       [ -n "$unfolded" ] && break
-      note "control $i:"; limit 90 osascript -l JavaScript ci/device-hub.js click-ui "$bid" $i 2>&1 | tee -a "$P"
+      note "control $i:"; limit 120 osascript -l JavaScript ci/device-hub.js click-ui "$bid" $i 2>&1 | tee -a "$P"
       sleep 8
       inner_lit "shots/unfold-ui$i.png" && unfolded=ui$i
     done
+    # the posture bar's "open" and "half open" buttons, where they sit on the runner's 1024 x 768 screen
+    for xy in "742 682" "709 682"; do
+      [ -n "$unfolded" ] && break
+      note "click at $xy:"; limit 30 osascript -l JavaScript ci/device-hub.js click-at $xy 2>&1 | tee -a "$P"
+      sleep 8
+      inner_lit "shots/unfold-at-${xy// /-}.png" && unfolded="click at $xy"
+    done
     screencapture -x shots/mac-2.png >> "$P" 2>&1
-  fi
-  if [ -z "$unfolded" ]; then
-    note "outer screen power off:"
-    limit 30 xcrun simctl io "$udid" screenConfig --display="$OUTER" power off >> "$P" 2>&1
-    sleep 8
-    inner_lit shots/unfold-power.png && unfolded=power
   fi
   if [ -z "$unfolded" ]; then note "couldn't unfold the iPhone Duo"; exit 0; fi
   note "unfolded ($unfolded)"
@@ -231,12 +192,11 @@ unfold)
     sleep 16
     limit 45 xcrun simctl io "$udid" screenshot --display="$INNER" "shots/duo-unfolded-$name.png" >> "$P" 2>&1 && note "shot inner $name"
   }
-  ishot tall-plate -DuoDemo YES -DuoDemoPrinter bambu-x1c -DuoDemoPanel plate -DuoDemoOrientation portrait -DuoDemoShowFold YES
-  ishot wide-plate -DuoDemo YES -DuoDemoPrinter bambu-x1c -DuoDemoPanel plate -DuoDemoOrientation landscape -DuoDemoShowFold YES
-  ishot wide-preview -DuoDemo YES -DuoDemoPrinter bambu-x1c -DuoDemoSlice YES -DuoDemoPanel preview -DuoDemoOrientation landscape
-  ishot wide-u1-print -DuoDemo YES -DuoDemoPrinter snapmaker-u1 -DuoDemoSlice YES -DuoDemoPanel print -DuoDemoOrientation landscape
-  ishot tall-settings -DuoDemo YES -DuoDemoPrinter snapmaker-u1 -DuoDemoPanel settings -DuoDemoOrientation portrait
+  ishot plate -DuoDemo YES -DuoDemoPrinter bambu-x1c -DuoDemoPanel plate -DuoDemoShowFold YES
+  ishot preview -DuoDemo YES -DuoDemoPrinter bambu-x1c -DuoDemoSlice YES -DuoDemoPanel preview
+  ishot u1-print -DuoDemo YES -DuoDemoPrinter snapmaker-u1 -DuoDemoSlice YES -DuoDemoPanel print
   ishot home -DuoDemo YES -DuoDemoHome YES -DuoDemoPrinter bambu-x1c
+  ishot rotated-plate -DuoDemo YES -DuoDemoPrinter bambu-x1c -DuoDemoPanel plate -DuoDemoOrientation portrait -DuoDemoShowFold YES
   screencapture -x shots/mac-3.png >> "$P" 2>&1
   ;;
 claude)
