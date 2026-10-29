@@ -61,6 +61,7 @@ jobs:
             exit 1
           fi
       - name: Screenshots
+        continue-on-error: true
         run: |
           APP="build/dd/Build/Products/Debug-iphonesimulator/Duo Slicer.app"
           BUNDLE=Com.jorgegzuniga.duoslicer
@@ -81,7 +82,14 @@ jobs:
             xcrun simctl terminate "$udid" "$BUNDLE" 2>/dev/null || true
             xcrun simctl launch "$udid" "$BUNDLE" "$@" > /dev/null
             sleep 14
-            xcrun simctl io "$udid" screenshot "shots/$label-$name.png" > /dev/null 2>&1 && echo "shot $label-$name"
+            if xcrun simctl io "$udid" screenshot "shots/$label-$name.png" >> shots/simctl-errors.txt 2>&1; then
+              echo "shot $label-$name"
+            else
+              for d in internal external; do
+                xcrun simctl io "$udid" screenshot --display=$d "shots/$label-$name-$d.png" >> shots/simctl-errors.txt 2>&1 && echo "shot $label-$name ($d)"
+              done
+            fi
+            return 0
           }
           xcrun simctl help > shots/simctl-help.txt 2>&1 || true
           xcrun simctl io help >> shots/simctl-help.txt 2>&1 || true
@@ -119,7 +127,7 @@ jobs:
       - name: Publish screenshots to the screenshots branch
         if: github.event_name == 'push'
         run: |
-          [ -n "$(ls shots/*.png 2>/dev/null)" ] || exit 0
+          [ -n "$(ls shots/* 2>/dev/null)" ] || exit 0
           cp -R shots "$RUNNER_TEMP/shots"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
