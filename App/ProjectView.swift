@@ -16,6 +16,12 @@ enum ProjectLayout: Equatable {
     case stacked(top: CGFloat, gap: CGFloat)  // 3D view over panels around a horizontal crease
     case threePane
 
+    /// 3D view and panels on either side of a vertical crease: each half gets its own header, so nothing sits on the fold.
+    var splitsAtCrease: Bool {
+        if case .split(_, let gap) = self { return gap > 0 }
+        return false
+    }
+
     init(size: CGSize, fold: CGRect?) {
         if let f = fold {
             let runsDown = f.height >= size.height * 0.8 && f.width < size.width * 0.3
@@ -41,6 +47,7 @@ struct ProjectView: View {
     @State private var pickFace = false
     @State private var shareURL: URL?
     @State private var fold: CGRect?
+    @State private var paneHeaders = false
 
     var body: some View {
         NavigationStack {
@@ -58,28 +65,19 @@ struct ProjectView: View {
                 .overlay {
                     if DemoMode.showFold { FoldDebugOverlay(fold: fold, size: geo.size) }
                 }
+                .onChange(of: layout, initial: true) { _, l in paneHeaders = l.splitsAtCrease }
             }
             .background(FoldReader(fold: $fold))
             .navigationTitle(model.fileName)
             .navigationBarTitleDisplayMode(.inline)
+            // unfolded iPhone Duo held wide: the bar's centred title would sit on the crease
+            .toolbar(paneHeaders ? .hidden : .visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Close") { model.close() }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        Button {
-                            Task { await model.centerPlate() }
-                        } label: { Label("Center plate on bed", systemImage: "arrow.up.and.down.and.arrow.left.and.right") }
-                        Button {
-                            Task { shareURL = await model.exportProjectFile() }
-                        } label: { Label("Share edited 3MF", systemImage: "square.and.arrow.up") }
-                        if model.sliceIsCurrent {
-                            Button {
-                                Task { shareURL = await model.exportSlicedFile() }
-                            } label: { Label("Share sliced file", systemImage: "doc.zipper") }
-                        }
-                    } label: { Image(systemName: "ellipsis.circle") }
+                    moreMenu
                 }
             }
             .sheet(item: Binding(get: { shareURL.map { ShareItem(url: $0) } }, set: { shareURL = $0?.url })) { item in
@@ -111,12 +109,49 @@ struct ProjectView: View {
     func split(left: CGFloat, gap: CGFloat) -> some View {
         HStack(spacing: 0) {
             VStack(spacing: 0) {
+                if gap > 0 { leftHeader }
                 PlateStrip()
                 canvas
             }
             .frame(width: left)
             if gap > 0 { FoldGap(vertical: true).frame(width: gap) } else { Divider() }
-            inspector
+            inspector(menu: gap > 0)
+        }
+    }
+
+    /// Close and the project name, on the left half when the navigation bar is hidden.
+    var leftHeader: some View {
+        HStack(spacing: 12) {
+            Button("Close") { model.close() }
+                .buttonStyle(.bordered)
+                .buttonBorderShape(.capsule)
+            Text(model.fileName)
+                .font(.headline)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal)
+        .padding(.top, 6)
+        .padding(.bottom, 2)
+    }
+
+    var moreMenu: some View {
+        Menu {
+            Button {
+                Task { await model.centerPlate() }
+            } label: { Label("Center plate on bed", systemImage: "arrow.up.and.down.and.arrow.left.and.right") }
+            Button {
+                Task { shareURL = await model.exportProjectFile() }
+            } label: { Label("Share edited 3MF", systemImage: "square.and.arrow.up") }
+            if model.sliceIsCurrent {
+                Button {
+                    Task { shareURL = await model.exportSlicedFile() }
+                } label: { Label("Share sliced file", systemImage: "doc.zipper") }
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+                .accessibilityLabel("More")
         }
     }
 
@@ -129,7 +164,7 @@ struct ProjectView: View {
             }
             .frame(height: top)
             FoldGap(vertical: false).frame(height: gap)
-            inspector
+            inspector()
         }
     }
 
@@ -140,7 +175,7 @@ struct ProjectView: View {
             Divider()
             canvas
             Divider()
-            inspector
+            inspector()
                 .frame(width: 400)
         }
     }
@@ -187,9 +222,23 @@ struct ProjectView: View {
         }
     }
 
-    var inspector: some View {
+    /// The panels. With `menu`, the ⋯ menu sits next to the panel picker (the navigation bar is hidden).
+    func inspector(menu: Bool = false) -> some View {
         VStack(spacing: 0) {
-            panelPicker
+            if menu {
+                HStack(spacing: 12) {
+                    Picker("Panel", selection: $panel) {
+                        ForEach(Panel.allCases) { Text($0.rawValue).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    moreMenu
+                        .font(.title2)
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 8)
+            } else {
+                panelPicker
+            }
             panelContent
                 .frame(maxHeight: .infinity)
         }
@@ -200,10 +249,11 @@ struct ProjectView: View {
 /// The strip over the iPhone Duo's crease: nothing interactive lands on the fold.
 struct FoldGap: View {
     let vertical: Bool
+    var background = Color(.secondarySystemBackground)
 
     var body: some View {
         ZStack {
-            Color(.secondarySystemBackground)
+            background
             Capsule()
                 .fill(Color.secondary.opacity(0.25))
                 .frame(width: vertical ? 3 : 36, height: vertical ? 36 : 3)
