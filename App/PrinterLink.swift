@@ -181,6 +181,7 @@ final class PrinterLink: ObservableObject {
     private var mqtt: MqttSession?
     private var poller: MoonrakerPoller?
     private var report: [String: Any] = [:]
+    private var lookedFor: Set<String> = []   // printers already searched for on the Wi-Fi this session
 
     init() {
         let s = PrinterStore.load()
@@ -237,6 +238,18 @@ final class PrinterLink: ObservableObject {
         printers.first { (!f.serial.isEmpty && $0.serial == f.serial) || $0.hostOnly == f.host }
     }
 
+    /// The printer isn't answering at its address: once per session, search the Wi-Fi for its serial number
+    /// in case the router gave it a new address.
+    private func lookForMoved(_ p: SavedPrinter) {
+        guard !p.serial.isEmpty, !lookedFor.contains(p.id) else { return }
+        lookedFor.insert(p.id)
+        Task { [weak self] in
+            let found = await PrinterDiscovery.search()
+            guard let self else { return }
+            for f in found where f.serial == p.serial { self.follow(f) }
+        }
+    }
+
     /// A saved Bambu printer turned up at a new address (the router handed out another one): follow it.
     func follow(_ f: FoundPrinter) {
         guard !f.serial.isEmpty,
@@ -286,6 +299,7 @@ final class PrinterLink: ObservableObject {
                         self.connected = ok
                         self.statusText = text
                         if !ok { self.state = "OFFLINE" }
+                        if !ok && text.hasPrefix("Couldn't reach") { self.lookForMoved(p) }
                     }
                 }, onMessage: { data in
                     guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }

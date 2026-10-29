@@ -212,6 +212,14 @@ final class PrinterDiscovery: ObservableObject {
         task = Task { [weak self] in await self?.run() }
     }
 
+    /// One search, start to finish (no UI).
+    static func search() async -> [FoundPrinter] {
+        let d = PrinterDiscovery()
+        d.retried = true
+        await d.run()
+        return d.found
+    }
+
     func stop() {
         task?.cancel()
         task = nil
