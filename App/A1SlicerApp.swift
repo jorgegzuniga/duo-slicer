@@ -112,68 +112,96 @@ struct HomeView: View {
     @State private var importing = false
     @State private var showPrinters = false
     @State private var showClaude = false
+    @State private var fold: CGRect?
 
     var body: some View {
         NavigationStack {
-            List {
-                Section {
-                    Button {
-                        importing = true
-                    } label: {
-                        Label("Open a 3MF project", systemImage: "square.and.arrow.down")
-                            .font(.headline)
+            GeometryReader { geo in
+                // on the unfolded iPhone Duo: projects on one side of the crease, printer and Claude on the other
+                switch ProjectLayout(size: geo.size, fold: fold) {
+                case .split(let left, let gap) where gap > 0:
+                    HStack(spacing: 0) {
+                        List { projectSections }.frame(width: left)
+                        FoldGap(vertical: true).frame(width: gap)
+                        List { deviceSections }
                     }
-                    .keyboardShortcut("o", modifiers: .command)
-                    Text("Pick a .3mf from Files, share one to Duo Slicer from MakerWorld, Safari or Mail, or drag one in.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-                if !model.recents.isEmpty {
-                    Section("Recent projects") {
-                        ForEach(model.recents, id: \.self) { url in
-                            Button {
-                                Task { await model.open(url: url) }
-                            } label: {
-                                Label(url.deletingPathExtension().lastPathComponent, systemImage: "cube.transparent")
-                            }
-                        }
-                        .onDelete { idx in idx.map { model.recents[$0] }.forEach(model.deleteRecent) }
+                case .stacked(let top, let gap):
+                    VStack(spacing: 0) {
+                        List { projectSections }.frame(height: top)
+                        FoldGap(vertical: false).frame(height: gap)
+                        List { deviceSections }
                     }
-                }
-                Section {
-                    Button {
-                        showPrinters = true
-                    } label: {
-                        PrinterStatusRow()
-                    }
-                } header: {
-                    Text("Printer")
-                } footer: {
-                    Text("Slicing for the \(model.target.name).")
-                }
-                Section {
-                    Button {
-                        showClaude = true
-                    } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: "sparkles").foregroundStyle(Theme.accent)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Use with Claude").foregroundStyle(.primary)
-                                Text(claude.enabled ? claude.status : "Let Claude open, slice and print from this app.")
-                                    .font(.footnote).foregroundStyle(.secondary).lineLimit(2)
-                            }
-                            Spacer()
-                            Image(systemName: "chevron.right").font(.footnote).foregroundStyle(.tertiary)
-                        }
+                default:
+                    List {
+                        projectSections
+                        deviceSections
                     }
                 }
             }
+            .background(FoldReader(fold: $fold))
             .navigationTitle("Duo Slicer")
             .fileImporter(isPresented: $importing, allowedContentTypes: [.threeMF, .zip, .data]) { result in
                 if case .success(let url) = result { Task { await model.open(url: url) } }
             }
             .sheet(isPresented: $showPrinters) { PrintersView() }
             .sheet(isPresented: $showClaude) { ClaudeSettingsView() }
+        }
+    }
+
+    @ViewBuilder var projectSections: some View {
+        Section {
+            Button {
+                importing = true
+            } label: {
+                Label("Open a 3MF project", systemImage: "square.and.arrow.down")
+                    .font(.headline)
+            }
+            .keyboardShortcut("o", modifiers: .command)
+            Text("Pick a .3mf from Files, share one to Duo Slicer from MakerWorld, Safari or Mail, or drag one in.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+        if !model.recents.isEmpty {
+            Section("Recent projects") {
+                ForEach(model.recents, id: \.self) { url in
+                    Button {
+                        Task { await model.open(url: url) }
+                    } label: {
+                        Label(url.deletingPathExtension().lastPathComponent, systemImage: "cube.transparent")
+                    }
+                }
+                .onDelete { idx in idx.map { model.recents[$0] }.forEach(model.deleteRecent) }
+            }
+        }
+    }
+
+    @ViewBuilder var deviceSections: some View {
+        Section {
+            Button {
+                showPrinters = true
+            } label: {
+                PrinterStatusRow()
+            }
+        } header: {
+            Text("Printer")
+        } footer: {
+            Text("Slicing for the \(model.target.name).")
+        }
+        Section {
+            Button {
+                showClaude = true
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "sparkles").foregroundStyle(Theme.accent)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Use with Claude").foregroundStyle(.primary)
+                        Text(claude.enabled ? claude.status : "Let Claude open, slice and print from this app.")
+                            .font(.footnote).foregroundStyle(.secondary).lineLimit(2)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right").font(.footnote).foregroundStyle(.tertiary)
+                }
+            }
         }
     }
 }

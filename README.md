@@ -24,9 +24,9 @@ The dual-nozzle Bambu printers (H2D, H2D Pro, H2C, X2D) aren't supported yet. Se
 
 Built with the iOS 27.1 SDK so the app fills the inner screen. The project screen follows the device:
 
-- **Unfolded, held wide**: 3D view on the left half, panels on the right half; the split sits exactly on the crease (from UIKit's reserved regions), so nothing you tap lands on the fold.
+- **Unfolded, held wide**: 3D view on the left half, panels on the right half; the split sits exactly on the crease (from UIKit's reserved regions, or the middle of the inner screen if UIKit doesn't report one), so nothing you tap lands on the fold. The home screen splits the same way: projects on one side, printer and Claude on the other.
 - **Unfolded, held tall or half-folded**: 3D view on the top half, panels below.
-- **Folded** and in Split View: one column with the panel under the 3D view.
+- **Folded** (outer screen) and in Split View: one column with the panel under the 3D view.
 - iPad and other large windows get the side-by-side layout, with a plates sidebar on very wide windows. ⌘O, ⌘R (slice), ⌘P (print) and ⌘1–⌘4 work with a keyboard.
 
 ## Use with Claude

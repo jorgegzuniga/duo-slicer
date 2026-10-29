@@ -138,6 +138,7 @@ unfold)
       nm -gU "$bin" 2>/dev/null | grep -iE "posture|hinge|fold|crease" | head -80
       strings -a "$bin" 2>/dev/null | grep -iE "posture|hinge|unfold|folded|foldstate" | sort -u | head -80
     done
+    echo "== private posture methods"; limit 180 swift ci/sim-posture.swift list
   } >> "$P" 2>&1
   inner_lit() {  # screenshot the inner screen; true when it isn't dark
     limit 45 xcrun simctl io "$udid" screenshot --display="$INNER" "$1" > /dev/null 2>&1

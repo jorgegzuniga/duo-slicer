@@ -12,7 +12,7 @@ jobs:
     # Xcode 27.1 / iOS 27.1 SDK so the app fills the iPhone Duo's inner screen
     runs-on: xcode-27
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Check secrets
         id: secrets
         env:
