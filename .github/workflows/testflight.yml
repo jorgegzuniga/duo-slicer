@@ -1,0 +1,64 @@
+name: TestFlight
+
+# Builds, signs (cloud-managed signing via an App Store Connect API key) and uploads to TestFlight.
+# Needs repository secrets: APPLE_TEAM_ID, ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8 (the .p8 file's full text).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  upload:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check secrets
+        id: secrets
+        env:
+          TEAM: ${{ secrets.APPLE_TEAM_ID }}
+          KEY: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          if [ -z "$TEAM" ] || [ -z "$KEY" ]; then
+            echo "TestFlight secrets aren't set yet; skipping upload."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Install XcodeGen
+        if: steps.secrets.outputs.ready == 'true'
+        run: brew install xcodegen
+      - name: Generate project
+        if: steps.secrets.outputs.ready == 'true'
+        run: xcodegen generate
+      - name: Archive
+        if: steps.secrets.outputs.ready == 'true'
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          set -o pipefail
+          KEY_PATH="$RUNNER_TEMP/AuthKey_$ASC_KEY_ID.p8"
+          printf '%s' "$ASC_KEY_P8" > "$KEY_PATH"
+          BUILD_NUMBER=$((GITHUB_RUN_NUMBER + 100))
+          xcodebuild -project A1Slicer.xcodeproj -scheme A1Slicer -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/A1Slicer.xcarchive" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$KEY_PATH" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            archive | tail -40
+      - name: Upload to TestFlight
+        if: steps.secrets.outputs.ready == 'true'
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          set -o pipefail
+          KEY_PATH="$RUNNER_TEMP/AuthKey_$ASC_KEY_ID.p8"
+          sed "s/TEAM_ID_PLACEHOLDER/$APPLE_TEAM_ID/" ci/ExportOptions.plist > "$RUNNER_TEMP/ExportOptions.plist"
+          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/A1Slicer.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" -exportPath "$RUNNER_TEMP/export" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$KEY_PATH" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID" | tail -40

@@ -1,0 +1,7 @@
+*.xcodeproj/
+xcuserdata/
+DerivedData/
+build/
+a1cli
+.DS_Store
+*.p8

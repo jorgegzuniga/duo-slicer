@@ -1,0 +1,80 @@
+name: A1Slicer
+options:
+  bundleIdPrefix: com.jorgegzuniga
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+packages:
+  OpenSSL:
+    url: https://github.com/krzyzanowskim/OpenSSL-Package.git
+    exactVersion: 3.6.5000
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  A1Slicer:
+    type: application
+    platform: iOS
+    scheme: {}
+    sources:
+      - path: App
+      - path: Engine/src
+      - path: Engine/include
+      - path: Engine/third_party/clipper2
+        excludes:
+          - "LICENSE"
+      - path: Engine/third_party/nlohmann
+      - path: Resources/a1-profiles.json
+        buildPhase: resources
+      - path: Resources/Assets.xcassets
+    dependencies:
+      - package: OpenSSL
+      - sdk: libz.tbd
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: A1 Slicer
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        NSLocalNetworkUsageDescription: A1 Slicer connects to your Bambu Lab A1 on your Wi-Fi to send prints and show their progress.
+        ITSAppUsesNonExemptEncryption: false
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: false
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: 3MF Project
+            LSHandlerRank: Alternate
+            LSItemContentTypes: [com.jorgegzuniga.a1slicer.3mf]
+        UTImportedTypeDeclarations:
+          - UTTypeIdentifier: com.jorgegzuniga.a1slicer.3mf
+            UTTypeDescription: 3MF Project
+            UTTypeConformsTo: [public.data]
+            UTTypeTagSpecification:
+              public.filename-extension: [3mf]
+              public.mime-type: [model/3mf, application/vnd.ms-package.3dmanufacturing-3dmodel+xml]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.jorgegzuniga.a1slicer
+        PRODUCT_NAME: A1 Slicer
+        SWIFT_OBJC_BRIDGING_HEADER: App/A1Slicer-Bridging-Header.h
+        HEADER_SEARCH_PATHS:
+          - $(SRCROOT)/Engine/include
+          - $(SRCROOT)/Engine/src
+          - $(SRCROOT)/Engine/third_party
+        CLANG_CXX_LANGUAGE_STANDARD: c++17
+        CLANG_WARN_DOCUMENTATION_COMMENTS: NO
+        GCC_WARN_INHIBIT_ALL_WARNINGS: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        TARGETED_DEVICE_FAMILY: "1,2"
+        CODE_SIGN_STYLE: Automatic
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+      configs:
+        Release:
+          GCC_OPTIMIZATION_LEVEL: "3"
+          SWIFT_OPTIMIZATION_LEVEL: -O
+        Debug:
+          GCC_OPTIMIZATION_LEVEL: "2"
