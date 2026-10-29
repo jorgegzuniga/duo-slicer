@@ -40,7 +40,23 @@ jobs:
         run: |
           set -o pipefail
           KEY_PATH="$RUNNER_TEMP/AuthKey_$ASC_KEY_ID.p8"
-          printf '%s' "$ASC_KEY_P8" > "$KEY_PATH"
+          # Rebuild the PEM: secrets pasted on a phone often lose their line breaks or pick up stray spaces.
+          printf '%s' "$ASC_KEY_P8" | python3 -c '
+          import sys, re, base64, textwrap
+          raw = sys.stdin.read()
+          body = re.sub(r"-----(BEGIN|END)[^-]*-----", "", raw)
+          body = re.sub(r"[^A-Za-z0-9+/=]", "", body)
+          try:
+              der = base64.b64decode(body + "=" * (-len(body) % 4))
+          except Exception:
+              sys.exit("ASC_KEY_P8 is not a valid .p8 key")
+          if not raw.strip().startswith("-----") and der.startswith(b"-----BEGIN"):
+              txt = der.decode()  # the secret was the whole file base64-encoded
+              body = re.sub(r"[^A-Za-z0-9+/=]", "", re.sub(r"-----(BEGIN|END)[^-]*-----", "", txt))
+              der = base64.b64decode(body)
+          print("key bytes:", len(der), file=sys.stderr)
+          sys.stdout.write("-----BEGIN PRIVATE KEY-----\n" + "\n".join(textwrap.wrap(body, 64)) + "\n-----END PRIVATE KEY-----\n")
+          ' > "$KEY_PATH"
           BUILD_NUMBER=$((GITHUB_RUN_NUMBER + 100))
           xcodebuild -project A1Slicer.xcodeproj -scheme A1Slicer -configuration Release \
             -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/A1Slicer.xcarchive" \
