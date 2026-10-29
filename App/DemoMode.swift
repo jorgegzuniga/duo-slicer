@@ -10,6 +10,7 @@ import UIKit
 ///   -DuoDemoSlice YES            slice before showing
 ///   -DuoDemoHome YES             stay on the home screen
 ///   -DuoDemoAddPrinter YES       open Add printer (searches the Wi-Fi) on the home screen
+///   -DuoDemoScanHosts a,b        search these addresses instead of the Wi-Fi network (stand-in printers in CI)
 ///   -DuoDemoOrientation <o>      landscape or portrait (rotates the window, e.g. the iPhone Duo's inner screen held wide)
 ///   -DuoDemoShowFold YES         outline the crease the project layout is using
 ///   -DuoDemoInner wide|tall      draw the app at the iPhone Duo inner screen's size, crease in the middle

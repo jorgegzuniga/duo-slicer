@@ -232,11 +232,17 @@ final class PrinterDiscovery: ObservableObject {
         found = []
         progress = 0
         defer { if !Task.isCancelled { scanning = false } }
-        guard let net = LocalNetwork.wifi() else {
-            problem = .noWiFi
-            return
+        var hosts: [String]
+        if let list = UserDefaults.standard.string(forKey: "DuoDemoScanHosts"), !list.isEmpty {
+            // CI: stand-in printers on loopback addresses
+            hosts = list.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+        } else {
+            guard let net = LocalNetwork.wifi() else {
+                problem = .noWiFi
+                return
+            }
+            hosts = LocalNetwork.hosts(around: net)
         }
-        let hosts = LocalNetwork.hosts(around: net)
         guard !hosts.isEmpty else { return }
         var blocked = 0
         var done = 0

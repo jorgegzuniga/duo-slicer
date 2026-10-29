@@ -209,30 +209,27 @@ unfold)
   screencapture -x shots/mac-3.png >> "$P" 2>&1
   ;;
 discover)
-  # Add printer's Wi-Fi search, against stand-in printers on two extra addresses of the runner's network:
-  # a Bambu Lab P1S (TLS certificate named with its serial number) and a Snapmaker U1 (Moonraker)
+  # Add printer's search against stand-in printers on loopback addresses: a Bambu Lab P1S (TLS certificate named
+  # with its serial number) and a Snapmaker U1 (Moonraker). The app is told to search those two addresses, since
+  # extra addresses on the runner's own network turned out unreachable.
   P=shots/discover.txt
   : > "$P"
-  ip=$(ipconfig getifaddr en0)
-  echo "runner en0 $ip mask $(ipconfig getoption en0 subnet_mask)" >> "$P"
-  [ -z "$ip" ] && { echo "no address on en0" >> "$P"; exit 0; }
-  base=${ip%.*}
-  a=$base.250
-  b=$base.251
-  [ "$ip" = "$a" ] && a=$base.252
-  [ "$ip" = "$b" ] && b=$base.253
-  sudo ifconfig en0 alias "$a" 255.255.255.255 >> "$P" 2>&1
-  sudo ifconfig en0 alias "$b" 255.255.255.255 >> "$P" 2>&1
+  a=127.0.0.2
+  b=127.0.0.3
+  sudo ifconfig lo0 alias "$a" up >> "$P" 2>&1
+  sudo ifconfig lo0 alias "$b" up >> "$P" 2>&1
   python3 ci/fake_printers.py "$a" "$b" > shots/fake-printers.txt 2>&1 &
   sleep 5
-  { echo "stand-ins: P1S at $a, U1 at $b"; curl -s -m 3 "http://$b:7125/printer/objects/list"; echo; } >> "$P" 2>&1
+  { echo "stand-ins: P1S at $a, U1 at $b"; curl -s -m 3 "http://$b:7125/printer/objects/list"; echo
+    echo "== runner network"; ifconfig en0 | grep "inet "; netstat -anv -p tcp | grep LISTEN | grep -E "\.8883|\.7125"
+    /usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate; } >> "$P" 2>&1
   udid=$(pick "^iPhone Duo$")
   [ -z "$udid" ] && udid=$(pick "^iPhone 1[0-9] Pro$")
   boot "$udid"
   limit 60 xcrun simctl io "$udid" enumerate > shots/duo-screens.txt 2>&1 || true
   DISPLAYS=$(screens shots/duo-screens.txt | awk '{print $1}' | xargs)
-  WAIT=45 shot discover "$udid" add-printer -DuoDemo YES -DuoDemoHome YES -DuoDemoAddPrinter YES
-  grep -c "from" shots/fake-printers.txt >> "$P" 2>&1 || true
+  WAIT=30 shot discover "$udid" add-printer -DuoDemo YES -DuoDemoHome YES -DuoDemoAddPrinter YES -DuoDemoScanHosts "$a,$b"
+  echo "connections the stand-ins saw: $(grep -c " from " shots/fake-printers.txt)" >> "$P"
   ;;
 claude)
   (cd relay && npm ci --no-audit --no-fund > /dev/null 2>&1 && npx wrangler dev --port 8787 --ip 127.0.0.1 > ../shots/wrangler.log 2>&1) &
