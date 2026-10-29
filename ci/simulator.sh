@@ -82,6 +82,7 @@ screenshots)
     case $extra in
       iphone) specs="$specs iphone:^iPhone_1[0-9]_Pro$" ;;
       ipad-mini) specs="$specs ipad-mini:^iPad_mini" ;;
+      ipad-pro) specs="$specs ipad-pro:^iPad_Pro_13" ;;
     esac
   done
   for spec in $specs; do
@@ -96,6 +97,17 @@ screenshots)
       # the outer and inner screens (not the TV-out, CarPlay and resizable ports, whose screenshots hang)
       DISPLAYS=$(screens shots/duo-screens.txt | awk '{print $1}' | xargs)
       [ -z "$DISPLAYS" ] && DISPLAYS="1 3"
+    fi
+    if [ "$label" = ipad-pro ]; then
+      # the iPhone Duo's unfolded layouts, drawn at the inner screen's size on the 13-inch iPad (the Duo simulator boots folded)
+      shot "$label" "$udid" duo-wide-plate -DuoDemo YES -DuoDemoPrinter bambu-x1c -DuoDemoPanel plate -DuoDemoInner wide -DuoDemoShowFold YES
+      shot "$label" "$udid" duo-wide-preview -DuoDemo YES -DuoDemoPrinter bambu-x1c -DuoDemoSlice YES -DuoDemoPanel preview -DuoDemoInner wide
+      shot "$label" "$udid" duo-wide-u1-print -DuoDemo YES -DuoDemoPrinter snapmaker-u1 -DuoDemoSlice YES -DuoDemoPanel print -DuoDemoInner wide
+      shot "$label" "$udid" duo-wide-home -DuoDemo YES -DuoDemoHome YES -DuoDemoPrinter bambu-x1c -DuoDemoInner wide
+      shot "$label" "$udid" duo-tall-plate -DuoDemo YES -DuoDemoPrinter bambu-x1c -DuoDemoPanel plate -DuoDemoInner tall -DuoDemoShowFold YES
+      shot "$label" "$udid" duo-tall-settings -DuoDemo YES -DuoDemoPrinter snapmaker-u1 -DuoDemoPanel settings -DuoDemoInner tall
+      limit 60 xcrun simctl shutdown "$udid" 2>/dev/null || true
+      continue
     fi
     shot "$label" "$udid" plate -DuoDemo YES -DuoDemoPrinter bambu-x1c -DuoDemoPanel plate
     shot "$label" "$udid" u1-print -DuoDemo YES -DuoDemoPrinter snapmaker-u1 -DuoDemoSlice YES -DuoDemoPanel print

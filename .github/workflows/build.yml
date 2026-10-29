@@ -66,6 +66,8 @@ jobs:
       - name: Screenshots
         continue-on-error: true
         timeout-minutes: 25
+        env:
+          SHOTS_DEVICES: ipad-pro
         run: ci/simulator.sh screenshots
       - name: Claude end to end (local relay + the app in the simulator)
         id: e2e

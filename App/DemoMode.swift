@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 import UIKit
 
 /// Launch arguments for screenshots and UI checks in the simulator (never used by the shipping flow):
@@ -10,15 +11,25 @@ import UIKit
 ///   -DuoDemoHome YES             stay on the home screen
 ///   -DuoDemoOrientation <o>      landscape or portrait (rotates the window, e.g. the iPhone Duo's inner screen held wide)
 ///   -DuoDemoShowFold YES         outline the crease the project layout is using
+///   -DuoDemoInner wide|tall      draw the app at the iPhone Duo inner screen's size, crease in the middle
+///                                (screenshots of the unfolded layouts on a large iPad simulator)
 ///   -DuoClaudeRelay <url>        connect "Use with Claude" to this relay (with -DuoClaudeSecret <key>)
 enum DemoMode {
     static var isOn: Bool { UserDefaults.standard.bool(forKey: "DuoDemo") }
     static var showFold: Bool { UserDefaults.standard.bool(forKey: "DuoDemoShowFold") }
+    static var fakeInnerSize: CGSize? {
+        switch UserDefaults.standard.string(forKey: "DuoDemoInner")?.lowercased() {
+        case "wide": return CGSize(width: 951, height: 669)
+        case "tall": return CGSize(width: 669, height: 951)
+        default: return nil
+        }
+    }
     static var panel: Panel? { UserDefaults.standard.string(forKey: "DuoDemoPanel").flatMap { Panel(rawValue: $0.capitalized) } }
 
     @MainActor
     static func run(model: AppModel, printer: PrinterLink, claude: ClaudeBridge) async {
         let d = UserDefaults.standard
+        defer { if let o = d.string(forKey: "DuoDemoOrientation") { rotate(to: o) } }
         if let relay = d.string(forKey: "DuoClaudeRelay"), !relay.isEmpty {
             claude.relayURL = relay
             claude.enabled = true
@@ -44,7 +55,6 @@ enum DemoMode {
         }
         if d.bool(forKey: "DuoDemoSlice") { await model.sliceCurrent() }
         if let p = panel { NotificationCenter.default.post(name: .duoDemoPanel, object: p.rawValue) }
-        if let o = d.string(forKey: "DuoDemoOrientation") { rotate(to: o) }
     }
 
     @MainActor
@@ -55,6 +65,21 @@ enum DemoMode {
         scene.keyWindow?.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
         scene.requestGeometryUpdate(.iOS(interfaceOrientations: mask)) { err in
             print("DuoDemoOrientation: \(err.localizedDescription)")
+        }
+    }
+}
+
+extension View {
+    /// -DuoDemoInner: the app in a window the size of the iPhone Duo's inner screen, centred on a bigger screen.
+    @ViewBuilder func duoDemoFrame() -> some View {
+        if let s = DemoMode.fakeInnerSize {
+            frame(width: s.width, height: s.height)
+                .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.black)
+                .ignoresSafeArea()
+        } else {
+            self
         }
     }
 }

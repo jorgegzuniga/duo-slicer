@@ -11,6 +11,7 @@ struct A1SlicerApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
+                .duoDemoFrame()
                 .environmentObject(model)
                 .environmentObject(printer)
                 .environmentObject(claude)

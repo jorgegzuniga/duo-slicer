@@ -73,6 +73,16 @@ final class FoldProbeView: UIView {
     /// the crease is a band about 40 points wide through the middle. Only used while the app fills the whole screen.
     private func estimatedFold() -> CGRect? {
         guard let window, let screen = window.windowScene?.screen else { return nil }
+        if let size = DemoMode.fakeInnerSize {
+            // -DuoDemoInner: an inner-screen-sized window centred in a bigger screen
+            let w = window.bounds
+            let fake = CGRect(x: (w.width - size.width) / 2, y: (w.height - size.height) / 2, width: size.width, height: size.height)
+            let band = size.width > size.height
+                ? CGRect(x: fake.midX - 20, y: fake.minY, width: 40, height: fake.height)
+                : CGRect(x: fake.minX, y: fake.midY - 20, width: fake.width, height: 40)
+            let r = convert(band, from: nil)
+            return bounds.insetBy(dx: 1, dy: 1).intersects(r) ? r : nil
+        }
         let s = screen.bounds.size
         let inner = CGSize(width: 669, height: 951)
         func near(_ a: CGSize, _ b: CGSize) -> Bool { abs(a.width - b.width) < 1.5 && abs(a.height - b.height) < 1.5 }
