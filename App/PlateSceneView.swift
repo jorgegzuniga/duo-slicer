@@ -1,6 +1,20 @@
 import SceneKit
 import SwiftUI
 
+/// SCNView that reports size changes (the camera's field of view follows the pane's shape).
+final class PlateSCNView: SCNView {
+    var onResize: ((CGSize) -> Void)?
+    private var lastSize = CGSize.zero
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        if bounds.size != lastSize {
+            lastSize = bounds.size
+            onResize?(bounds.size)
+        }
+    }
+}
+
 /// 3D view of one plate. Printer coords (x right, y back, z up) map to SceneKit as (x, z, -y).
 struct PlateSceneView: UIViewRepresentable {
     var bed: PrinterModel.Bed = .a1
@@ -15,7 +29,8 @@ struct PlateSceneView: UIViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     func makeUIView(context: Context) -> SCNView {
-        let v = SCNView()
+        let v = PlateSCNView()
+        v.onResize = { [weak coord = context.coordinator] size in coord?.fitCamera(to: size) }
         v.scene = SCNScene()
         v.backgroundColor = UIColor.secondarySystemBackground
         v.allowsCameraControl = true
@@ -123,6 +138,14 @@ struct PlateSceneView: UIViewRepresentable {
             view?.pointOfView = cam
         }
 
+        /// Keep the whole bed in view in tall, narrow panes (the field of view follows the narrow side).
+        func fitCamera(to size: CGSize) {
+            guard size.width > 0, size.height > 0,
+                  let cam = view?.scene?.rootNode.childNode(withName: "cam", recursively: false)?.camera else { return }
+            cam.projectionDirection = size.height > size.width ? .horizontal : .vertical
+            cam.fieldOfView = 60
+        }
+
         func resetCamera() {
             guard let cam = view?.scene?.rootNode.childNode(withName: "cam", recursively: false) else { return }
             let b = bed ?? .a1
@@ -132,6 +155,7 @@ struct PlateSceneView: UIViewRepresentable {
             cam.look(at: SCNVector3(cx, 0, -cy))
             view?.pointOfView = cam
             view?.defaultCameraController.target = SCNVector3(cx, 0, -cy)
+            if let v = view { fitCamera(to: v.bounds.size) }
         }
 
         func rebuildModel() {

@@ -107,6 +107,8 @@ struct SliceButton: View {
             Task { await model.sliceCurrent() }
         } label: {
             Label(model.slicing ? "Slicing…" : "Slice plate \(model.plate?.id ?? 0)", systemImage: "square.stack.3d.down.right")
+                .symbolRenderingMode(.monochrome)
+                .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
         }
         .buttonStyle(.borderedProminent)

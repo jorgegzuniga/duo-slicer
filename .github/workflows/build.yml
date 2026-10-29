@@ -31,16 +31,17 @@ jobs:
 
   app:
     name: App compiles + simulator screenshots
-    runs-on: macos-15
+    # Xcode 27.1 / iOS 27.1 SDK: apps built with older SDKs run in a phone-sized window on the iPhone Duo's inner screen
+    runs-on: xcode-27
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Select Xcode 26
+      - name: Select Xcode 27.1
         run: |
-          ls -d /Applications/Xcode*.app
-          X=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
-          if [ -z "$X" ]; then echo "::error::No Xcode 26 on this runner: $(ls -d /Applications/Xcode*.app | xargs)"; exit 1; fi
+          X=/Applications/Xcode_27.1.app
+          [ -d "$X" ] || X=$(ls -d /Applications/Xcode_27.[1-9]*.app 2>/dev/null | grep -v -i candidate | sort -V | tail -1)
+          if [ -z "$X" ]; then echo "::error::No Xcode 27.1 on this runner: $(ls -d /Applications/Xcode*.app | xargs)"; exit 1; fi
           sudo xcode-select -s "$X/Contents/Developer"
           echo "::notice::Using $X"
           xcodebuild -version
@@ -52,7 +53,7 @@ jobs:
         run: |
           xcodebuild -project A1Slicer.xcodeproj -scheme A1Slicer -configuration Debug \
             -destination 'generic/platform=iOS Simulator' -derivedDataPath build/dd \
-            CODE_SIGNING_ALLOWED=NO build > build.log 2>&1 || true
+            CODE_SIGNING_ALLOWED=NO DUO_FLAGS=DUO_SDK build > build.log 2>&1 || true
           if ! grep -q "BUILD SUCCEEDED" build.log; then
             { grep -nE "error|Error|failed|Undefined|ld: " build.log | head -300 || true; echo "----- tail"; tail -150 build.log; } > build-errors.txt
             { grep -E "error:" build.log || true; } | sort -u | head -40 | sed 's/%/%25/g' | while IFS= read -r l; do echo "::error::${l:0:900}"; done
@@ -82,7 +83,10 @@ jobs:
             sleep 14
             xcrun simctl io "$udid" screenshot "shots/$label-$name.png" > /dev/null 2>&1 && echo "shot $label-$name"
           }
-          for spec in "iphone:^iPhone 1[0-9] Pro$" "ipad-mini:^iPad mini" "ipad-13:^iPad Pro 13"; do
+          xcrun simctl help > shots/simctl-help.txt 2>&1 || true
+          xcrun simctl io help >> shots/simctl-help.txt 2>&1 || true
+          xcrun simctl help ui >> shots/simctl-help.txt 2>&1 || true
+          for spec in "duo:^iPhone Duo$" "iphone:^iPhone 1[0-9] Pro$" "ipad-mini:^iPad mini"; do
             label=${spec%%:*}; pat=${spec#*:}
             udid=$(pick "$pat")
             if [ -z "$udid" ]; then echo "::warning::No simulator matching $pat"; continue; fi
@@ -107,7 +111,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -q --orphan ci-logs-publish
           git rm -rfq .
-          rm -rf build shots
+          git clean -fdxq
           cp "$RUNNER_TEMP/build-errors.txt" .
           git add build-errors.txt
           git commit -qm "Build errors for $GITHUB_SHA"
@@ -122,7 +126,8 @@ jobs:
           git checkout --orphan screenshots-publish
           git rm -rfq .
           rm -rf build shots
-          cp "$RUNNER_TEMP"/shots/*.png .
+          git clean -fdxq
+          cp "$RUNNER_TEMP"/shots/*.png "$RUNNER_TEMP"/shots/*.txt . 2>/dev/null || true
           printf '# Simulator screenshots\n\nFrom %s (%s).\n' "$GITHUB_SHA" "$GITHUB_REF_NAME" > README.md
           git add -A
           git commit -qm "Screenshots for $GITHUB_SHA"

@@ -6,16 +6,31 @@ enum Panel: String, CaseIterable, Identifiable {
 }
 
 /// How the project screen is arranged for the space it has.
-/// Folded iPhone (and Split View slivers): one column with a panel under the 3D view.
-/// iPhone Duo unfolded, iPad portrait: 3D view and panels side by side, split at the middle so the fold falls on the divider.
-/// Wide windows (iPad landscape, a large external display): a plates sidebar, the 3D view and the panels.
+/// - iPhone Duo unfolded: the two halves of the screen, split exactly at the crease. Held wide, the 3D view is on the
+///   left half and the panels on the right; held tall (or half-folded like a laptop), the 3D view is on top and the panels below.
+/// - Folded iPhone and Split View: one column with a panel under the 3D view.
+/// - iPad and other large windows: 3D view and panels side by side; very wide windows add a plates sidebar.
 enum ProjectLayout: Equatable {
-    case compact, split, threePane
+    case compact
+    case split(left: CGFloat, gap: CGFloat)   // 3D view | panels; gap = the crease
+    case stacked(top: CGFloat, gap: CGFloat)  // 3D view over panels around a horizontal crease
+    case threePane
 
-    init(size: CGSize) {
-        if size.width >= 1050 { self = .threePane }
-        else if size.width >= 640 { self = .split }
-        else { self = .compact }
+    init(size: CGSize, fold: CGRect?) {
+        if let f = fold {
+            let runsDown = f.height >= size.height * 0.8 && f.width < size.width * 0.3
+            let runsAcross = f.width >= size.width * 0.8 && f.height < size.height * 0.3
+            if runsDown && f.minX >= 260 && size.width - f.maxX >= 260 { self = .split(left: f.minX, gap: f.width); return }
+            if runsAcross && f.minY >= 220 && size.height - f.maxY >= 220 { self = .stacked(top: f.minY, gap: f.height); return }
+        }
+        if size.width >= 1050 {
+            self = .threePane
+        } else if size.width >= 640 {
+            let aspect = size.width / max(1, size.height)
+            self = .split(left: (0.8...1.3).contains(aspect) ? size.width / 2 : max(size.width - 400, size.width * 0.5), gap: 0)
+        } else {
+            self = .compact
+        }
     }
 }
 
@@ -25,20 +40,23 @@ struct ProjectView: View {
     @State private var panel: Panel = .plate
     @State private var pickFace = false
     @State private var shareURL: URL?
+    @State private var fold: CGRect?
 
     var body: some View {
         NavigationStack {
             GeometryReader { geo in
-                let layout = ProjectLayout(size: geo.size)
+                let layout = ProjectLayout(size: geo.size, fold: fold)
                 Group {
                     switch layout {
                     case .compact: compact
-                    case .split: split(geo.size)
+                    case .split(let left, let gap): split(left: left, gap: gap)
+                    case .stacked(let top, let gap): stacked(top: top, gap: gap)
                     case .threePane: threePane
                     }
                 }
                 .animation(.snappy, value: layout)
             }
+            .background(FoldReader(fold: $fold))
             .navigationTitle(model.fileName)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -86,17 +104,27 @@ struct ProjectView: View {
         }
     }
 
-    func split(_ size: CGSize) -> some View {
-        // near-square (an unfolded iPhone Duo): split evenly so the fold sits on the divider
-        let aspect = size.width / max(1, size.height)
-        let left = (0.8...1.3).contains(aspect) ? size.width / 2 : max(size.width - 400, size.width * 0.5)
-        return HStack(spacing: 0) {
+    func split(left: CGFloat, gap: CGFloat) -> some View {
+        HStack(spacing: 0) {
             VStack(spacing: 0) {
                 PlateStrip()
                 canvas
             }
             .frame(width: left)
-            Divider()
+            if gap > 0 { FoldGap(vertical: true).frame(width: gap) } else { Divider() }
+            inspector
+        }
+    }
+
+    /// Unfolded iPhone Duo held tall, or half-folded on a table: 3D view on the top half, panels on the bottom half.
+    func stacked(top: CGFloat, gap: CGFloat) -> some View {
+        VStack(spacing: 0) {
+            VStack(spacing: 0) {
+                PlateStrip()
+                canvas
+            }
+            .frame(height: top)
+            FoldGap(vertical: false).frame(height: gap)
             inspector
         }
     }
@@ -162,6 +190,21 @@ struct ProjectView: View {
                 .frame(maxHeight: .infinity)
         }
         .background(Color(.systemGroupedBackground))
+    }
+}
+
+/// The strip over the iPhone Duo's crease: nothing interactive lands on the fold.
+struct FoldGap: View {
+    let vertical: Bool
+
+    var body: some View {
+        ZStack {
+            Color(.secondarySystemBackground)
+            Capsule()
+                .fill(Color.secondary.opacity(0.25))
+                .frame(width: vertical ? 3 : 36, height: vertical ? 36 : 3)
+        }
+        .accessibilityHidden(true)
     }
 }
 

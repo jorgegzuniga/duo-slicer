@@ -9,7 +9,8 @@ on:
 
 jobs:
   upload:
-    runs-on: macos-15
+    # Xcode 27.1 / iOS 27.1 SDK so the app fills the iPhone Duo's inner screen
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@v4
       - name: Check secrets
@@ -24,12 +25,12 @@ jobs:
           else
             echo "ready=true" >> "$GITHUB_OUTPUT"
           fi
-      - name: Select Xcode 26
+      - name: Select Xcode 27.1
         if: steps.secrets.outputs.ready == 'true'
         run: |
-          ls -d /Applications/Xcode*.app
-          X=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
-          if [ -z "$X" ]; then echo "::error::No Xcode 26 on this runner: $(ls -d /Applications/Xcode*.app | xargs)"; exit 1; fi
+          X=/Applications/Xcode_27.1.app
+          [ -d "$X" ] || X=$(ls -d /Applications/Xcode_27.[1-9]*.app 2>/dev/null | grep -v -i candidate | sort -V | tail -1)
+          if [ -z "$X" ]; then echo "::error::No Xcode 27.1 on this runner: $(ls -d /Applications/Xcode*.app | xargs)"; exit 1; fi
           sudo xcode-select -s "$X/Contents/Developer"
           echo "::notice::Using $X"
           xcodebuild -version
@@ -86,7 +87,7 @@ jobs:
           BUILD_NUMBER=$((GITHUB_RUN_NUMBER + 100))
           xcodebuild -project A1Slicer.xcodeproj -scheme A1Slicer -configuration Release \
             -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/A1Slicer.xcarchive" \
-            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CURRENT_PROJECT_VERSION="$BUILD_NUMBER" DUO_RELAY_URL="$DUO_RELAY_URL" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CURRENT_PROJECT_VERSION="$BUILD_NUMBER" DUO_RELAY_URL="$DUO_RELAY_URL" DUO_FLAGS=DUO_SDK \
             -allowProvisioningUpdates \
             -authenticationKeyPath "$KEY_PATH" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
             archive > archive.log 2>&1 || {

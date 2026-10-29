@@ -66,6 +66,9 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: Com.jorgegzuniga.duoslicer
         DUO_RELAY_URL: ""
+        # CI sets DUO_FLAGS=DUO_SDK when building with the iOS 27.1 SDK (iPhone Duo fold APIs)
+        DUO_FLAGS: ""
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) $(DUO_FLAGS)
         PRODUCT_NAME: Duo Slicer
         SWIFT_OBJC_BRIDGING_HEADER: App/A1Slicer-Bridging-Header.h
         HEADER_SEARCH_PATHS:
