@@ -66,7 +66,7 @@ final class MqttSession: @unchecked Sendable {
         while !isStopped {
             onState(false, "Connecting to \(host)…")
             var err = [CChar](repeating: 0, count: 512)
-            let clientId = "a1slicer-\(UInt32.random(in: 1000...999_999))"
+            let clientId = "duoslicer-\(UInt32.random(in: 1000...999_999))"
             guard let m = a1_mqtt_connect(host, 8883, "bblp", code, clientId, 6000, &err, 512) else {
                 let msg = String(cString: err)
                 onState(false, msg.isEmpty ? "Couldn't connect." : msg)

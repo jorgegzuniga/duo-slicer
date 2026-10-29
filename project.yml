@@ -35,22 +35,22 @@ targets:
     info:
       path: App/Info.plist
       properties:
-        CFBundleDisplayName: A1 Slicer
+        CFBundleDisplayName: Duo Slicer
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
         UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
-        NSLocalNetworkUsageDescription: A1 Slicer connects to your Bambu Lab A1 on your Wi-Fi to send prints and show their progress.
+        NSLocalNetworkUsageDescription: Duo Slicer connects to your Bambu Lab A1 on your Wi-Fi to send prints and show their progress.
         ITSAppUsesNonExemptEncryption: false
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: false
         CFBundleDocumentTypes:
           - CFBundleTypeName: 3MF Project
             LSHandlerRank: Alternate
-            LSItemContentTypes: [com.jorgegzuniga.a1slicer.3mf]
+            LSItemContentTypes: [com.jorgegzuniga.duoslicer.3mf]
         UTImportedTypeDeclarations:
-          - UTTypeIdentifier: com.jorgegzuniga.a1slicer.3mf
+          - UTTypeIdentifier: com.jorgegzuniga.duoslicer.3mf
             UTTypeDescription: 3MF Project
             UTTypeConformsTo: [public.data]
             UTTypeTagSpecification:
@@ -58,8 +58,8 @@ targets:
               public.mime-type: [model/3mf, application/vnd.ms-package.3dmanufacturing-3dmodel+xml]
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.jorgegzuniga.a1slicer
-        PRODUCT_NAME: A1 Slicer
+        PRODUCT_BUNDLE_IDENTIFIER: com.jorgegzuniga.duoslicer
+        PRODUCT_NAME: Duo Slicer
         SWIFT_OBJC_BRIDGING_HEADER: App/A1Slicer-Bridging-Header.h
         HEADER_SEARCH_PATHS:
           - $(SRCROOT)/Engine/include

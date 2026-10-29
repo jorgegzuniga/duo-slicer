@@ -1,4 +1,4 @@
-# A1 Slicer
+# Duo Slicer
 
 An iPhone slicer for the Bambu Lab A1. Open a Bambu 3MF, look through its plates in 3D, re-orient parts, change settings, slice on the phone, and send the plate straight to the printer over your home Wi-Fi. No computer involved.
 
@@ -42,7 +42,7 @@ The Xcode project is generated with [XcodeGen](https://github.com/yonaskolb/Xcod
 | `ASC_ISSUER_ID` | The issuer ID shown above the keys list |
 | `ASC_KEY_P8` | The full text of the downloaded `AuthKey_XXXX.p8` file |
 
-Before the first upload, create the app record in App Store Connect (My Apps → + → New App) with bundle ID `com.jorgegzuniga.a1slicer`. Builds then appear in TestFlight a few minutes after the workflow finishes.
+Before the first upload, create the app record in App Store Connect (My Apps → + → New App) with bundle ID `com.jorgegzuniga.duoslicer`. Builds then appear in TestFlight a few minutes after the workflow finishes.
 
 ## Engine development
 

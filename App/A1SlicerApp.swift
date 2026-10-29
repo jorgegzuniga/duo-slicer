@@ -24,7 +24,7 @@ enum Theme {
 }
 
 extension UTType {
-    static let threeMF = UTType(importedAs: "com.jorgegzuniga.a1slicer.3mf", conformingTo: .data)
+    static let threeMF = UTType(importedAs: "com.jorgegzuniga.duoslicer.3mf", conformingTo: .data)
 }
 
 struct RootView: View {
@@ -72,7 +72,7 @@ struct HomeView: View {
                         Label("Open a 3MF project", systemImage: "square.and.arrow.down")
                             .font(.headline)
                     }
-                    Text("Pick a .3mf from Files, or share one to A1 Slicer from MakerWorld, Safari or Mail.")
+                    Text("Pick a .3mf from Files, or share one to Duo Slicer from MakerWorld, Safari or Mail.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -96,7 +96,7 @@ struct HomeView: View {
                     }
                 }
             }
-            .navigationTitle("A1 Slicer")
+            .navigationTitle("Duo Slicer")
             .fileImporter(isPresented: $importing, allowedContentTypes: [.threeMF, .zip, .data]) { result in
                 if case .success(let url) = result { Task { await model.open(url: url) } }
             }
