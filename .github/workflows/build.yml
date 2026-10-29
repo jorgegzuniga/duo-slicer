@@ -45,10 +45,10 @@ jobs:
           sudo xcode-select -s "$X/Contents/Developer"
           echo "::notice::Using $X"
           xcodebuild -version
-      - name: Start the simulators early (the iPhone Duo's first boot is slow)
-        continue-on-error: true
-        run: ci/simulator.sh preboot
       - name: Install XcodeGen
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+          HOMEBREW_NO_INSTALL_CLEANUP: "1"
         run: brew install xcodegen
       - name: Generate project
         run: xcodegen generate
@@ -72,6 +72,10 @@ jobs:
         continue-on-error: true
         timeout-minutes: 20
         run: ci/simulator.sh claude
+      - name: iPhone Duo unfolded (inner screen, through Device Hub)
+        continue-on-error: true
+        timeout-minutes: 20
+        run: ci/simulator.sh unfold
       - name: Publish the build errors to the ci-logs branch
         if: failure() && github.event_name == 'push'
         run: |

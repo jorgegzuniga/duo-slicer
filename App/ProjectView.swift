@@ -55,6 +55,9 @@ struct ProjectView: View {
                     }
                 }
                 .animation(.snappy, value: layout)
+                .overlay {
+                    if DemoMode.showFold { FoldDebugOverlay(fold: fold, size: geo.size) }
+                }
             }
             .background(FoldReader(fold: $fold))
             .navigationTitle(model.fileName)

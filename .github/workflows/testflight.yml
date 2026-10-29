@@ -36,6 +36,9 @@ jobs:
           xcodebuild -version
       - name: Install XcodeGen
         if: steps.secrets.outputs.ready == 'true'
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+          HOMEBREW_NO_INSTALL_CLEANUP: "1"
         run: brew install xcodegen
       - name: Generate project
         if: steps.secrets.outputs.ready == 'true'
