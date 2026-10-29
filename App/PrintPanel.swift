@@ -7,68 +7,55 @@ struct PrintPanel: View {
     @State private var opts = StartOptions()
     @State private var bedClear = false
     @State private var sending = false
-    @State private var showSetup = false
+    @State private var showPrinters = false
     @State private var confirmStop = false
 
     var body: some View {
         List {
             Section {
-                Button { showSetup = true } label: { PrinterStatusRow() }
-                if printer.connected && printer.isBusy {
-                    if printer.state == "RUNNING" || printer.state == "PAUSE" {
-                        ProgressView(value: Double(printer.percent) / 100) {
-                            Text(printer.jobName).font(.footnote).lineLimit(1)
-                        } currentValueLabel: {
-                            Text("Layer \(printer.layer) of \(printer.totalLayers) · nozzle \(Int(printer.nozzle))°C · bed \(Int(printer.bed))°C").font(.caption2)
-                        }
-                    }
-                    HStack {
-                        if printer.state == "PAUSE" {
-                            Button("Resume") { printer.send("resume") }.buttonStyle(.bordered)
-                        } else {
-                            Button("Pause") { printer.send("pause") }.buttonStyle(.bordered)
-                        }
-                        Spacer()
-                        Button("Stop print", role: .destructive) { confirmStop = true }.buttonStyle(.bordered)
-                    }
-                }
-                if printer.printError != 0 {
-                    Label("The printer reports error \(String(printer.printError, radix: 16).uppercased()). Check its screen.", systemImage: "exclamationmark.octagon")
-                        .font(.footnote).foregroundStyle(.red)
-                }
+                Button { showPrinters = true } label: { PrinterStatusRow() }
+                PrintProgressRows(confirmStop: $confirmStop)
             } header: { Text("Printer") }
+
+            if model.target.isToolChanger, let p = model.plate {
+                ToolheadSection(plate: p)
+            }
 
             if !model.sliceIsCurrent {
                 Section {
                     SliceButton()
                 } footer: {
-                    Text("Slice plate \(model.plate?.id ?? 0) first; you'll pick spools and send it from here.")
+                    Text(model.target.isToolChanger
+                         ? "Slice plate \(model.plate?.id ?? 0) for the \(model.target.shortName) with these heads, then send it from here."
+                         : "Slice plate \(model.plate?.id ?? 0) first; you'll pick spools and send it from here.")
                 }
             } else if let s = model.slice {
-                Section {
-                    ForEach(s.filaments ?? []) { f in
-                        HStack {
-                            Circle().fill(Color(hex: f.color)).frame(width: 14, height: 14)
-                            Text("F\(f.id) \(f.type)").font(.subheadline)
-                            Spacer()
-                            Picker("Spool", selection: Binding(get: { mapping[f.id] ?? 254 }, set: { mapping[f.id] = $0 })) {
-                                ForEach(trayOptions) { t in
-                                    Text(t.loaded ? "\(t.label) · \(t.name)" : "\(t.label) · empty").tag(t.id)
+                if !model.target.isToolChanger {
+                    Section {
+                        ForEach(s.filaments ?? []) { f in
+                            HStack {
+                                Circle().fill(Color(hex: f.color)).frame(width: 14, height: 14)
+                                Text("F\(f.id) \(f.type)").font(.subheadline)
+                                Spacer()
+                                Picker("Spool", selection: Binding(get: { mapping[f.id] ?? 254 }, set: { mapping[f.id] = $0 })) {
+                                    ForEach(trayOptions) { t in
+                                        Text(t.loaded ? "\(t.label) · \(t.name)" : "\(t.label) · empty").tag(t.id)
+                                    }
                                 }
+                                .labelsHidden()
                             }
-                            .labelsHidden()
                         }
+                    } header: {
+                        Text("Spools")
+                    } footer: {
+                        Text(printer.trays.isEmpty ? "Connect the printer to see what's loaded in the AMS." : "Matched by colour and material. Change any you like.")
                     }
-                } header: {
-                    Text("Spools")
-                } footer: {
-                    Text(printer.trays.isEmpty ? "Connect the printer to see what's loaded in the AMS lite." : "Matched by colour and material. Change any you like.")
-                }
-                Section("Options") {
-                    Toggle("Auto bed leveling", isOn: $opts.bedLeveling)
-                    Toggle("Flow calibration", isOn: $opts.flowCalibration)
-                    Toggle("Vibration compensation", isOn: $opts.vibrationCalibration)
-                    Toggle("Timelapse", isOn: $opts.timelapse)
+                    Section("Options") {
+                        Toggle("Auto bed leveling", isOn: $opts.bedLeveling)
+                        Toggle("Flow calibration", isOn: $opts.flowCalibration)
+                        Toggle("Vibration compensation", isOn: $opts.vibrationCalibration)
+                        Toggle("Timelapse", isOn: $opts.timelapse)
+                    }
                 }
                 Section {
                     Toggle("The bed is clear and the \(shortBed(s.bedType ?? "")) is on", isOn: $bedClear)
@@ -76,22 +63,27 @@ struct PrintPanel: View {
                         ProgressView(value: p) { Text("Uploading to the printer…").font(.footnote) }
                     }
                     Button {
-                        Task { await send(s) }
+                        Task { await send() }
                     } label: {
-                        Label(sending ? "Sending…" : "Print plate \(s.plateId ?? 0) on A1", systemImage: "printer.fill")
+                        Label(sending ? "Sending…" : "Print plate \(s.plateId ?? 0) on \(printer.activeModel?.shortName ?? "printer")", systemImage: "printer.fill")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
                     .disabled(!bedClear || sending || !printer.connected || printer.isBusy)
+                    .keyboardShortcut("p", modifiers: .command)
+                    if !printer.isConfigured {
+                        Text("Add a printer to print over Wi-Fi, or share the sliced file from the ••• menu.").font(.footnote).foregroundStyle(.secondary)
+                    }
                     if let r = printer.lastResult { Text(r).font(.footnote).foregroundStyle(.secondary) }
                 } footer: {
-                    Text(String(format: "%@ · %.1f g. The A1 heats, levels and purges for a few minutes before the first layer.", formatDuration(s.seconds ?? 0), s.grams ?? 0))
+                    Text(String(format: "%@ · %.1f g. The %@ heats, levels and cleans the nozzle for a few minutes before the first layer.",
+                                formatDuration(s.seconds ?? 0), s.grams ?? 0, model.target.shortName))
                 }
             }
         }
         .listStyle(.insetGrouped)
-        .sheet(isPresented: $showSetup) { PrinterSetupView() }
+        .sheet(isPresented: $showPrinters) { PrintersView() }
         .confirmationDialog("Stop this print?", isPresented: $confirmStop, titleVisibility: .visible) {
             Button("Stop print", role: .destructive) { printer.send("stop") }
         } message: {
@@ -113,6 +105,7 @@ struct PrintPanel: View {
         case "Supertack Plate": return "SuperTack plate"
         case "Cool Plate": return "cool plate"
         case "Engineering Plate": return "engineering plate"
+        case "Textured Cool Plate": return "textured cool plate"
         default: return "plate"
         }
     }
@@ -122,12 +115,11 @@ struct PrintPanel: View {
         mapping = printer.suggestMapping(for: s.filaments ?? [])
     }
 
-    func send(_ s: SliceSummary) async {
+    func send() async {
         sending = true
         defer { sending = false }
-        guard let data = await model.slicedFile() else { model.errorMessage = "The sliced file is missing. Slice again."; return }
         do {
-            try await printer.startPrint(file: data, summary: s, jobName: "\(model.fileName) \(model.plate?.name ?? "")", mapping: mapping, options: opts)
+            try await model.sendCurrentSlice(to: printer, mapping: mapping, options: opts)
             bedClear = false
         } catch {
             model.errorMessage = error.localizedDescription
@@ -135,61 +127,281 @@ struct PrintPanel: View {
     }
 }
 
-struct PrinterSetupView: View {
+/// Live progress, pause / resume / stop and errors for the selected printer.
+struct PrintProgressRows: View {
     @EnvironmentObject var printer: PrinterLink
+    @Binding var confirmStop: Bool
+
+    var body: some View {
+        if printer.connected && printer.isBusy {
+            if printer.state == "RUNNING" || printer.state == "PAUSE" {
+                ProgressView(value: Double(printer.percent) / 100) {
+                    Text(printer.jobName).font(.footnote).lineLimit(1)
+                } currentValueLabel: {
+                    Text(detail).font(.caption2)
+                }
+            }
+            HStack {
+                if printer.state == "PAUSE" {
+                    Button("Resume") { printer.send("resume") }.buttonStyle(.bordered)
+                } else {
+                    Button("Pause") { printer.send("pause") }.buttonStyle(.bordered)
+                }
+                Spacer()
+                Button("Stop print", role: .destructive) { confirmStop = true }.buttonStyle(.bordered)
+            }
+        }
+        if let e = printer.errorText {
+            Label(e, systemImage: "exclamationmark.octagon").font(.footnote).foregroundStyle(.red)
+        }
+    }
+
+    var detail: String {
+        var parts: [String] = []
+        if printer.totalLayers > 0 { parts.append("Layer \(printer.layer) of \(printer.totalLayers)") }
+        parts.append("nozzle \(Int(printer.nozzle))°C")
+        parts.append("bed \(Int(printer.bed))°C")
+        return parts.joined(separator: " · ")
+    }
+}
+
+/// Tool changers: which head prints each colour on this plate. Defaults to the closest loaded filament.
+struct ToolheadSection: View {
+    @EnvironmentObject var model: AppModel
+    @EnvironmentObject var printer: PrinterLink
+    let plate: PlateInfo
+
+    var body: some View {
+        Section {
+            ForEach(plate.filaments, id: \.self) { f in
+                HStack {
+                    Circle().fill(model.color(of: f)).frame(width: 14, height: 14).overlay(Circle().stroke(.secondary.opacity(0.4), lineWidth: 0.5))
+                    Text("F\(f) \(filamentType(f))").font(.subheadline)
+                    Spacer()
+                    Picker("Head", selection: Binding(get: { model.tool(for: f) ?? 0 }, set: { model.setTool($0, for: f) })) {
+                        ForEach(0..<max(1, model.target.tools), id: \.self) { t in
+                            Text(headLabel(t)).tag(t)
+                        }
+                    }
+                    .labelsHidden()
+                }
+            }
+            if plate.filaments.count > model.target.tools {
+                Label("This plate uses \(plate.filaments.count) colours and the \(model.target.shortName) has \(model.target.tools) heads. Colours that share a head print in that head's filament.",
+                      systemImage: "exclamationmark.circle")
+                    .font(.footnote).foregroundStyle(.orange)
+            }
+        } header: {
+            Text("Toolheads")
+        } footer: {
+            Text(printer.toolheads.contains(where: { $0.loaded })
+                 ? "Matched to the filament loaded in each head. Changing a head means slicing again."
+                 : "Connect the \(model.target.shortName) to match colours to what's loaded in each head.")
+        }
+        .onAppear(perform: suggest)
+        .onChange(of: printer.toolheads) { _, _ in suggest() }
+        .onChange(of: model.plateIndex) { _, _ in suggest() }
+    }
+
+    func filamentType(_ f: Int) -> String {
+        guard let p = model.project, f - 1 < p.filaments.count else { return "" }
+        return p.filaments[f - 1].type
+    }
+
+    func headLabel(_ t: Int) -> String {
+        if let h = printer.toolheads.first(where: { $0.id == t }) { return "Head \(t + 1) · \(h.summary)" }
+        return "Head \(t + 1)"
+    }
+
+    func suggest() {
+        guard !model.toolMapIsCustom, let p = model.project else { return }
+        let fs = plate.filaments.map { f in
+            (index: f, color: f - 1 < model.options.colors.count ? model.options.colors[f - 1] : "#888888",
+             type: f - 1 < p.filaments.count ? p.filaments[f - 1].type : "PLA")
+        }
+        model.applySuggestedToolMap(printer.suggestToolMap(filaments: fs, tools: model.target.tools))
+    }
+}
+
+/// Saved printers: pick the one to slice for and print on, add or edit them.
+struct PrintersView: View {
+    @EnvironmentObject var printer: PrinterLink
+    @EnvironmentObject var model: AppModel
     @Environment(\.dismiss) private var dismiss
-    @State private var ip = ""
-    @State private var serial = ""
-    @State private var code = ""
+    @State private var editing: SavedPrinter?
+    @State private var adding = false
 
     var body: some View {
         NavigationStack {
-            Form {
+            List {
                 Section {
-                    TextField("IP address, e.g. 192.168.1.50", text: $ip).keyboardType(.numbersAndPunctuation).textInputAutocapitalization(.never).autocorrectionDisabled()
-                    TextField("Serial number", text: $serial).textInputAutocapitalization(.characters).autocorrectionDisabled()
-                    SecureField(printer.hasCode ? "Access code (saved)" : "Access code", text: $code).keyboardType(.numberPad)
+                    ForEach(printer.printers) { p in
+                        HStack(spacing: 12) {
+                            Button {
+                                printer.select(p.id)
+                            } label: {
+                                HStack(spacing: 12) {
+                                    Image(systemName: p.id == printer.activeID ? "checkmark.circle.fill" : "circle")
+                                        .foregroundStyle(p.id == printer.activeID ? Theme.accent : .secondary)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(p.name).foregroundStyle(.primary)
+                                        Text("\(p.model?.name ?? p.modelID) · \(p.hostOnly)").font(.footnote).foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            Button { editing = p } label: { Image(systemName: "info.circle") }
+                                .buttonStyle(.borderless)
+                        }
+                    }
+                    .onDelete { idx in idx.map { printer.printers[$0] }.forEach(printer.remove) }
+                    Button { adding = true } label: { Label("Add printer", systemImage: "plus") }
                 } header: {
-                    Text("Bambu Lab A1")
+                    Text("Your printers")
                 } footer: {
-                    Text("On the printer: Settings → WLAN shows the IP, LAN-only Mode shows the access code, and Settings → Device shows the serial number. The access code is stored in your iPhone's Keychain.")
+                    Text("Duo Slicer slices for the selected printer and sends prints to it over your Wi-Fi.")
                 }
-                Section("One-time printer setup") {
-                    Label("Update the A1 to firmware 01.05 or newer", systemImage: "1.circle")
-                    Label("Insert a microSD card (prints are stored on it)", systemImage: "2.circle")
-                    Label("Turn on LAN-only Mode, then restart the printer", systemImage: "3.circle")
-                    Label("Turn on Developer Mode in the same menu", systemImage: "4.circle")
+
+                if printer.printers.isEmpty {
+                    Section {
+                        Picker("Slice for", selection: Binding(get: { model.target.id }, set: { id in Task { await model.setTarget(id) } })) {
+                            ForEach(PrinterCatalog.models) { Text($0.name).tag($0.id) }
+                        }
+                    } footer: {
+                        Text("No printer on your network yet? You can still slice for any of these and share the file.")
+                    }
                 }
-                .font(.subheadline)
-                Section {
-                    LabeledContent("Status", value: printer.statusText)
-                    if printer.connected {
-                        ForEach(printer.trays) { t in
-                            HStack {
-                                Circle().fill(t.loaded && !t.color.isEmpty ? Color(hex: t.color) : .clear).overlay(Circle().stroke(.secondary)).frame(width: 14, height: 14)
-                                Text(t.label)
-                                Spacer()
-                                Text(t.loaded ? t.name : "Empty").foregroundStyle(.secondary)
+
+                if let p = printer.active {
+                    Section(p.name) {
+                        LabeledContent("Status", value: printer.statusText)
+                        if printer.connected {
+                            ForEach(printer.trays) { t in
+                                HStack {
+                                    Circle().fill(t.loaded && !t.color.isEmpty ? Color(hex: t.color) : .clear).overlay(Circle().stroke(.secondary)).frame(width: 14, height: 14)
+                                    Text(t.label)
+                                    Spacer()
+                                    Text(t.loaded ? t.name : "Empty").foregroundStyle(.secondary)
+                                }
+                            }
+                            ForEach(printer.toolheads) { h in
+                                HStack {
+                                    Circle().fill(h.loaded && !h.color.isEmpty ? Color(hex: h.color) : .clear).overlay(Circle().stroke(.secondary)).frame(width: 14, height: 14)
+                                    Text(h.label)
+                                    Spacer()
+                                    Text("\(h.summary) · \(Int(h.temperature))°C").foregroundStyle(.secondary)
+                                }
                             }
                         }
                     }
                 }
             }
-            .navigationTitle("Printer")
+            .navigationTitle("Printers")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Connect") {
-                        printer.save(ip: ip, serial: serial, code: code)
-                        code = ""
+                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+            }
+            .sheet(item: $editing) { p in PrinterEditor(printer: p) }
+            .sheet(isPresented: $adding) { PrinterEditor(printer: nil) }
+        }
+    }
+}
+
+struct PrinterEditor: View {
+    @EnvironmentObject var link: PrinterLink
+    @Environment(\.dismiss) private var dismiss
+    let original: SavedPrinter?
+    @State private var modelID: String
+    @State private var name: String
+    @State private var host: String
+    @State private var serial: String
+    @State private var port: String
+    @State private var secret = ""
+
+    init(printer: SavedPrinter?) {
+        original = printer
+        _modelID = State(initialValue: printer?.modelID ?? PrinterCatalog.fallbackID)
+        _name = State(initialValue: printer?.name ?? "")
+        _host = State(initialValue: printer?.host ?? "")
+        _serial = State(initialValue: printer?.serial ?? "")
+        _port = State(initialValue: String(printer?.port ?? 7125))
+    }
+
+    var model: PrinterModel? { PrinterCatalog.model(modelID) }
+    var isBambu: Bool { model?.isBambu ?? true }
+    var hasSecret: Bool { original.map { link.hasSecret($0) } ?? false }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Printer") {
+                    Picker("Model", selection: $modelID) {
+                        ForEach(PrinterCatalog.vendors, id: \.self) { v in
+                            Section(v) {
+                                ForEach(PrinterCatalog.models.filter { $0.vendor == v }) { Text($0.shortName).tag($0.id) }
+                            }
+                        }
                     }
-                    .disabled(ip.isEmpty || serial.isEmpty || (!printer.hasCode && code.isEmpty))
+                    TextField("Name", text: $name, prompt: Text(model?.name ?? "Name"))
+                }
+                Section {
+                    TextField("IP address, e.g. 192.168.1.50", text: $host)
+                        .keyboardType(.numbersAndPunctuation).textInputAutocapitalization(.never).autocorrectionDisabled()
+                    if isBambu {
+                        TextField("Serial number", text: $serial).textInputAutocapitalization(.characters).autocorrectionDisabled()
+                        SecureField(hasSecret ? "Access code (saved)" : "Access code", text: $secret).keyboardType(.asciiCapable)
+                    } else {
+                        TextField("Port", text: $port).keyboardType(.numberPad)
+                        SecureField(hasSecret ? "API key (saved)" : "API key (only if you set one)", text: $secret)
+                            .textInputAutocapitalization(.never).autocorrectionDisabled()
+                    }
+                } header: {
+                    Text("On your Wi-Fi")
+                } footer: {
+                    Text(isBambu
+                         ? "On the printer's screen, the network settings show the IP address and, in LAN-only mode, the access code; the device page shows the serial number. The access code stays in your iPhone's Keychain."
+                         : "The \(model?.shortName ?? "printer")'s screen shows its IP address in the Wi-Fi settings. Duo Slicer talks to it through Moonraker on port 7125.")
+                }
+                Section("One-time printer setup") {
+                    if isBambu {
+                        Label("Update the printer to its latest firmware", systemImage: "1.circle")
+                        Label("Insert a microSD card (prints are stored on it)", systemImage: "2.circle")
+                        Label("Turn on LAN-only mode, then restart the printer", systemImage: "3.circle")
+                        Label("Turn on Developer mode in the same menu", systemImage: "4.circle")
+                    } else {
+                        Label("Connect the \(model?.shortName ?? "printer") to the same Wi-Fi as your iPhone", systemImage: "1.circle")
+                        Label("Load filament in each head so colours can be matched", systemImage: "2.circle")
+                        Label("Put the smooth PEI plate on the bed", systemImage: "3.circle")
+                    }
+                }
+                .font(.subheadline)
+                if let original {
+                    Section {
+                        Button("Remove printer", role: .destructive) {
+                            link.remove(original)
+                            dismiss()
+                        }
+                    }
                 }
             }
-            .onAppear {
-                ip = printer.ip
-                serial = printer.serial
+            .navigationTitle(original == nil ? "Add printer" : "Edit printer")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        var p = original ?? SavedPrinter(modelID: modelID, name: name, host: host)
+                        p.modelID = modelID
+                        p.name = name
+                        p.host = host
+                        p.serial = isBambu ? serial : ""
+                        p.port = Int(port) ?? 7125
+                        link.upsert(p, secret: secret.isEmpty ? nil : secret)
+                        dismiss()
+                    }
+                    .disabled(host.trimmingCharacters(in: .whitespaces).isEmpty || (isBambu && (serial.isEmpty || (!hasSecret && secret.isEmpty))))
+                }
             }
         }
     }

@@ -6,18 +6,32 @@ struct LayerPreviewView: View {
 
     var body: some View {
         GeometryReader { geo in
-            let side = min(geo.size.width, geo.size.height) - 16
+            let bed = model.bed
+            let bw = CGFloat(bed.width), bd = CGFloat(bed.depth)
+            let scale = min((geo.size.width - 16) / bw, (geo.size.height - 16) / bd)
             Canvas { ctx, size in
-                let s = side / 256
-                let ox = (size.width - side) / 2, oy = (size.height - side) / 2
-                ctx.fill(Path(roundedRect: CGRect(x: ox, y: oy, width: side, height: side), cornerRadius: 6), with: .color(Theme.bed))
+                let s = scale
+                let w = bw * s, h = bd * s
+                let ox = (size.width - w) / 2 - CGFloat(bed.x0) * s, oy = (size.height - h) / 2 + h + CGFloat(bed.y0) * s
+                // printer (x, y) -> view (ox + x*s, oy - y*s)
+                ctx.fill(Path(roundedRect: CGRect(x: (size.width - w) / 2, y: (size.height - h) / 2, width: w, height: h), cornerRadius: 6), with: .color(Theme.bed))
                 var grid = Path()
-                for i in 0...16 {
-                    let t = CGFloat(i) * 16 * s
-                    grid.move(to: CGPoint(x: ox + t, y: oy)); grid.addLine(to: CGPoint(x: ox + t, y: oy + side))
-                    grid.move(to: CGPoint(x: ox, y: oy + t)); grid.addLine(to: CGPoint(x: ox + side, y: oy + t))
+                let step: CGFloat = 16
+                var gx = (CGFloat(bed.x0) / step).rounded(.up) * step
+                while gx <= CGFloat(bed.x1) {
+                    grid.move(to: CGPoint(x: ox + gx * s, y: oy - CGFloat(bed.y0) * s)); grid.addLine(to: CGPoint(x: ox + gx * s, y: oy - CGFloat(bed.y1) * s))
+                    gx += step
+                }
+                var gy = (CGFloat(bed.y0) / step).rounded(.up) * step
+                while gy <= CGFloat(bed.y1) {
+                    grid.move(to: CGPoint(x: ox + CGFloat(bed.x0) * s, y: oy - gy * s)); grid.addLine(to: CGPoint(x: ox + CGFloat(bed.x1) * s, y: oy - gy * s))
+                    gy += step
                 }
                 ctx.stroke(grid, with: .color(.white.opacity(0.08)), lineWidth: 0.5)
+                if let ex = bed.excludeBox {
+                    let r = CGRect(x: ox + CGFloat(ex.0) * s, y: oy - CGFloat(ex.3) * s, width: CGFloat(ex.2 - ex.0) * s, height: CGFloat(ex.3 - ex.1) * s)
+                    ctx.fill(Path(r), with: .color(.black.opacity(0.35)))
+                }
                 guard let pv = model.preview else { return }
                 // one path per (filament, role) for speed
                 var paths: [UInt16: Path] = [:]
@@ -25,8 +39,8 @@ struct LayerPreviewView: View {
                 pv.segments.withUnsafeBufferPointer { sp in
                     for i in 0..<n {
                         let key = pv.meta[i]
-                        let x0 = ox + CGFloat(sp[i * 4]) * s, y0 = oy + side - CGFloat(sp[i * 4 + 1]) * s
-                        let x1 = ox + CGFloat(sp[i * 4 + 2]) * s, y1 = oy + side - CGFloat(sp[i * 4 + 3]) * s
+                        let x0 = ox + CGFloat(sp[i * 4]) * s, y0 = oy - CGFloat(sp[i * 4 + 1]) * s
+                        let x1 = ox + CGFloat(sp[i * 4 + 2]) * s, y1 = oy - CGFloat(sp[i * 4 + 3]) * s
                         paths[key, default: Path()].move(to: CGPoint(x: x0, y: y0))
                         paths[key, default: Path()].addLine(to: CGPoint(x: x1, y: y1))
                     }
@@ -98,6 +112,7 @@ struct SliceButton: View {
         .buttonStyle(.borderedProminent)
         .controlSize(.large)
         .disabled(model.slicing || model.plate?.offBed == true)
+        .keyboardShortcut("r", modifiers: .command)
     }
 }
 
@@ -111,11 +126,16 @@ struct SliceSummaryView: View {
             LabeledContent("Filament", value: String(format: "%.1f g", summary.grams ?? 0))
             LabeledContent("Layers", value: "\(summary.layers ?? 0)")
             if let t = summary.toolChanges, t > 0 { LabeledContent("Colour changes", value: "\(t)") }
-            LabeledContent("Build plate", value: summary.bedType ?? "")
+            LabeledContent("Build plate", value: bedTypeLabel(summary.bedType ?? ""))
+            if let p = summary.printer { LabeledContent("Printer", value: p) }
             ForEach(summary.filaments ?? []) { f in
                 HStack {
                     Circle().fill(Color(hex: f.color)).frame(width: 12, height: 12)
-                    Text("F\(f.id) · \(presetDisplayName(f.preset))").lineLimit(1)
+                    if let t = f.tool, summary.isPlainGcode {
+                        Text("Head \(t + 1) · F\((f.projectFilaments ?? [f.id]).map(String.init).joined(separator: ", F")) · \(presetDisplayName(f.preset))").lineLimit(1)
+                    } else {
+                        Text("F\(f.id) · \(presetDisplayName(f.preset))").lineLimit(1)
+                    }
                     Spacer()
                     Text(String(format: "%.1f g", f.grams)).monospacedDigit().foregroundStyle(.secondary)
                 }

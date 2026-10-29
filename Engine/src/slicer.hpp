@@ -49,6 +49,9 @@ struct SliceSettings {
     double skirtDistance = 2;
     double topAngle = 45, solidAngle = 45, sparseAngle = 45;
     std::string wallSequence = "inner wall/outer wall";
+    // target printer bed (printable area) and an optional no-print box (e.g. the X1/P1 purge corner)
+    double bedMinX = 0, bedMinY = 0, bedMaxX = 256, bedMaxY = 256;
+    double exMinX = 0, exMinY = 0, exMaxX = 0, exMaxY = 0;
 };
 
 struct PlateSlice {

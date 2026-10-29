@@ -1,0 +1,76 @@
+name: Claude relay
+
+# Deploys relay/ (the Cloudflare Worker that connects Claude to the app) to the account in these repository secrets:
+#   CLOUDFLARE_API_TOKEN   (API token made from the "Edit Cloudflare Workers" template)
+#   CLOUDFLARE_ACCOUNT_ID
+on:
+  push:
+    branches: [main]
+    paths: ["relay/**", ".github/workflows/relay.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check secrets
+        id: secrets
+        env:
+          TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$TOKEN" ] || [ -z "$ACCOUNT" ]; then
+            echo "::warning::Add CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID as repository secrets to deploy the Claude relay."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-node@v4
+        if: steps.secrets.outputs.ready == 'true'
+        with:
+          node-version: 22
+      - name: workers.dev subdomain
+        if: steps.secrets.outputs.ready == 'true'
+        id: sub
+        env:
+          TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          api="https://api.cloudflare.com/client/v4/accounts/$ACCOUNT/workers/subdomain"
+          curl -s -H "Authorization: Bearer $TOKEN" "$api" > sub.json
+          sub=$(python3 -c 'import json; d=json.load(open("sub.json")); print((d.get("result") or {}).get("subdomain") or "")')
+          if [ -z "$sub" ]; then
+            # new accounts don't have a workers.dev subdomain yet
+            want="duo-$(head -c 4 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+            curl -s -X PUT -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" --data "{\"subdomain\":\"$want\"}" "$api" > put.json
+            python3 -c 'import json,sys; d=json.load(open("put.json")); sys.exit(0 if d.get("success") else "Could not register a workers.dev subdomain: %s" % d.get("errors"))'
+            sub="$want"
+          fi
+          echo "subdomain=$sub" >> "$GITHUB_OUTPUT"
+      - name: Deploy
+        if: steps.secrets.outputs.ready == 'true'
+        working-directory: relay
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          npm ci --no-audit --no-fund
+          npx wrangler deploy 2>&1 | tee deploy.log || { grep -iE "error|✘" deploy.log | head -20 | while IFS= read -r l; do echo "::error::$l"; done; exit 1; }
+      - name: Check the relay answers
+        if: steps.secrets.outputs.ready == 'true'
+        env:
+          SUB: ${{ steps.sub.outputs.subdomain }}
+        run: |
+          url="https://duo-slicer-relay.$SUB.workers.dev"
+          key=$(head -c 30 /dev/urandom | base64 | tr '+/' '-_' | tr -d '=\n')
+          for i in $(seq 1 30); do
+            out=$(curl -s -X POST "$url/mcp/$key" -H 'content-type: application/json' \
+              --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci","version":"1"}}}' || true)
+            if echo "$out" | grep -q '"protocolVersion"'; then echo "::notice title=Claude relay::$url"; exit 0; fi
+            sleep 5
+          done
+          echo "::warning::Deployed, but $url isn't answering yet (a new workers.dev subdomain can take a few minutes)."

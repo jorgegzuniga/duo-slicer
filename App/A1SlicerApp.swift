@@ -5,15 +5,26 @@ import UniformTypeIdentifiers
 struct A1SlicerApp: App {
     @StateObject private var model = AppModel()
     @StateObject private var printer = PrinterLink()
+    @StateObject private var claude = ClaudeBridge()
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environmentObject(model)
                 .environmentObject(printer)
+                .environmentObject(claude)
                 .tint(Theme.accent)
                 .onOpenURL { url in Task { await model.open(url: url) } }
-                .onAppear { printer.start() }
+                .onAppear {
+                    claude.attach(model: model, printer: printer)
+                    if DemoMode.isOn {
+                        Task { await DemoMode.run(model: model, printer: printer) }
+                    } else {
+                        printer.start()
+                    }
+                }
+                .onChange(of: scenePhase) { _, phase in claude.setForeground(phase == .active) }
         }
     }
 }
@@ -29,6 +40,9 @@ extension UTType {
 
 struct RootView: View {
     @EnvironmentObject var model: AppModel
+    @EnvironmentObject var printer: PrinterLink
+    @EnvironmentObject var claude: ClaudeBridge
+    @State private var dropTargeted = false
 
     var body: some View {
         Group {
@@ -48,19 +62,56 @@ struct RootView: View {
                 }
             }
         }
+        .overlay {
+            if dropTargeted {
+                RoundedRectangle(cornerRadius: 18).stroke(Theme.accent, style: StrokeStyle(lineWidth: 3, dash: [10, 6]))
+                    .padding(8)
+                    .allowsHitTesting(false)
+            }
+        }
+        // drag a .3mf in from Files or another app (Split View on an unfolded iPhone Duo or iPad)
+        .onDrop(of: [UTType.threeMF, UTType.zip, UTType.data, UTType.fileURL], isTargeted: $dropTargeted) { providers in
+            DropLoader.load(providers) { url in Task { await model.open(url: url) } }
+        }
         .alert("Something went wrong", isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) {
             Button("OK", role: .cancel) {}
         } message: {
             Text(model.errorMessage ?? "")
         }
+        .sheet(item: Binding(get: { claude.approval }, set: { if $0 == nil { claude.answer(false) } })) { req in
+            ApprovalSheet(request: req)
+        }
+        .task(id: printer.activeID) {
+            // slice for the printer that's selected
+            if let m = printer.activeModel, m.id != model.target.id { await model.setTarget(m.id) }
+        }
+    }
+}
+
+/// Copies dropped files into a temporary folder, then hands back a file URL.
+enum DropLoader {
+    static func load(_ providers: [NSItemProvider], open: @escaping @MainActor (URL) -> Void) -> Bool {
+        guard let p = providers.first else { return false }
+        let types = [UTType.threeMF.identifier, UTType.zip.identifier, UTType.data.identifier]
+        guard let type = types.first(where: { p.hasItemConformingToTypeIdentifier($0) }) else { return false }
+        p.loadFileRepresentation(forTypeIdentifier: type) { url, _ in
+            guard let url else { return }
+            let dest = FileManager.default.temporaryDirectory.appendingPathComponent(url.lastPathComponent)
+            try? FileManager.default.removeItem(at: dest)
+            guard (try? FileManager.default.copyItem(at: url, to: dest)) != nil else { return }
+            Task { @MainActor in open(dest) }
+        }
+        return true
     }
 }
 
 struct HomeView: View {
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var printer: PrinterLink
+    @EnvironmentObject var claude: ClaudeBridge
     @State private var importing = false
-    @State private var showPrinter = false
+    @State private var showPrinters = false
+    @State private var showClaude = false
 
     var body: some View {
         NavigationStack {
@@ -72,7 +123,8 @@ struct HomeView: View {
                         Label("Open a 3MF project", systemImage: "square.and.arrow.down")
                             .font(.headline)
                     }
-                    Text("Pick a .3mf from Files, or share one to Duo Slicer from MakerWorld, Safari or Mail.")
+                    .keyboardShortcut("o", modifiers: .command)
+                    Text("Pick a .3mf from Files, share one to Duo Slicer from MakerWorld, Safari or Mail, or drag one in.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -88,11 +140,31 @@ struct HomeView: View {
                         .onDelete { idx in idx.map { model.recents[$0] }.forEach(model.deleteRecent) }
                     }
                 }
-                Section("Printer") {
+                Section {
                     Button {
-                        showPrinter = true
+                        showPrinters = true
                     } label: {
                         PrinterStatusRow()
+                    }
+                } header: {
+                    Text("Printer")
+                } footer: {
+                    Text("Slicing for the \(model.target.name).")
+                }
+                Section {
+                    Button {
+                        showClaude = true
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "sparkles").foregroundStyle(Theme.accent)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Use with Claude").foregroundStyle(.primary)
+                                Text(claude.enabled ? claude.status : "Let Claude open, slice and print from this app.")
+                                    .font(.footnote).foregroundStyle(.secondary).lineLimit(2)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right").font(.footnote).foregroundStyle(.tertiary)
+                        }
                     }
                 }
             }
@@ -100,7 +172,8 @@ struct HomeView: View {
             .fileImporter(isPresented: $importing, allowedContentTypes: [.threeMF, .zip, .data]) { result in
                 if case .success(let url) = result { Task { await model.open(url: url) } }
             }
-            .sheet(isPresented: $showPrinter) { PrinterSetupView() }
+            .sheet(isPresented: $showPrinters) { PrintersView() }
+            .sheet(isPresented: $showClaude) { ClaudeSettingsView() }
         }
     }
 }
@@ -114,7 +187,7 @@ struct PrinterStatusRow: View {
                 .fill(printer.connected ? (printer.isBusy ? Theme.accent : Color.green) : Color.secondary)
                 .frame(width: 10, height: 10)
             VStack(alignment: .leading, spacing: 2) {
-                Text(printer.isConfigured ? "Bambu Lab A1 · \(printer.ip)" : "Set up your A1")
+                Text(printer.active.map { "\($0.name) · \($0.hostOnly)" } ?? "Add your printer")
                     .foregroundStyle(.primary)
                 Text(statusLine).font(.footnote).foregroundStyle(.secondary)
             }
@@ -124,6 +197,7 @@ struct PrinterStatusRow: View {
     }
 
     var statusLine: String {
+        guard printer.isConfigured else { return "Bambu Lab A1, P1, X1, H2S and more, or the Snapmaker U1" }
         guard printer.connected else { return printer.statusText }
         switch printer.state {
         case "RUNNING": return "Printing \(printer.percent)% · \(formatDuration(Double(printer.remainingMinutes) * 60)) left"
@@ -132,6 +206,71 @@ struct PrinterStatusRow: View {
         case "FINISH": return "Ready · last print finished"
         case "FAILED": return "Ready · last print stopped"
         default: return "Ready"
+        }
+    }
+}
+
+struct ClaudeSettingsView: View {
+    @EnvironmentObject var claude: ClaudeBridge
+    @Environment(\.dismiss) private var dismiss
+    @State private var copied = false
+    @State private var confirmReset = false
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Toggle("Let Claude use Duo Slicer", isOn: $claude.enabled)
+                    if claude.enabled {
+                        LabeledContent("Status") {
+                            Text(claude.status).multilineTextAlignment(.trailing).foregroundStyle(claude.connected ? Theme.accent : .secondary)
+                        }
+                    }
+                } footer: {
+                    Text("Claude can open your projects, change settings, slice plates and check your printer. Starting or stopping a print always asks you here first. It works while Duo Slicer is open.")
+                }
+                if claude.enabled {
+                    Section {
+                        if let url = claude.connectorURL {
+                            Text(url).font(.footnote.monospaced()).textSelection(.enabled)
+                            Button {
+                                UIPasteboard.general.string = url
+                                copied = true
+                            } label: {
+                                Label(copied ? "Copied" : "Copy connector URL", systemImage: copied ? "checkmark" : "doc.on.doc")
+                            }
+                        } else {
+                            Text("Add the relay address below to get your connector URL.").foregroundStyle(.secondary)
+                        }
+                    } header: {
+                        Text("Connector URL")
+                    } footer: {
+                        Text("In Claude, open Settings › Connectors, add a custom connector and paste this URL. Keep it private: it's the key to these tools.")
+                    }
+                    Section {
+                        TextField("https://duo-slicer-relay.example.workers.dev", text: $claude.relayURL)
+                            .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
+                        Button("Make a new connector URL", role: .destructive) { confirmReset = true }
+                    } header: {
+                        Text("Relay")
+                    } footer: {
+                        Text("The relay is the small Cloudflare Worker in the duo-slicer repository. It passes Claude's requests to this app.")
+                    }
+                    if !claude.activity.isEmpty {
+                        Section("Recent") {
+                            ForEach(Array(claude.activity.enumerated()), id: \.offset) { _, line in Text(line).font(.footnote) }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Claude")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+            .confirmationDialog("Make a new connector URL?", isPresented: $confirmReset, titleVisibility: .visible) {
+                Button("New URL", role: .destructive) { claude.resetSecret(); copied = false }
+            } message: {
+                Text("The current URL stops working; add the new one in Claude.")
+            }
         }
     }
 }

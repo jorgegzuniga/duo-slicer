@@ -1,0 +1,16 @@
+# Duo Slicer relay: claude.ai talks MCP to /mcp/<secret>; the app holds a WebSocket on /device?token=<secret>.
+name = "duo-slicer-relay"
+main = "src/index.js"
+compatibility_date = "2025-09-01"
+workers_dev = true
+
+[[durable_objects.bindings]]
+name = "RELAY"
+class_name = "Relay"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Relay"]
+
+[observability]
+enabled = true

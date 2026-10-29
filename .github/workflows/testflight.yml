@@ -39,9 +39,26 @@ jobs:
       - name: Generate project
         if: steps.secrets.outputs.ready == 'true'
         run: xcodegen generate
+      - name: Claude relay address
+        if: steps.secrets.outputs.ready == 'true'
+        id: relay
+        env:
+          TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          # bake the relay URL into the app when the relay is deployed from this repository
+          url=""
+          if [ -n "$TOKEN" ] && [ -n "$ACCOUNT" ]; then
+            sub=$(curl -s -H "Authorization: Bearer $TOKEN" "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT/workers/subdomain" \
+              | python3 -c 'import json,sys; d=json.load(sys.stdin); print((d.get("result") or {}).get("subdomain") or "")' || true)
+            [ -n "$sub" ] && url="https://duo-slicer-relay.$sub.workers.dev"
+          fi
+          echo "::notice::Claude relay: ${url:-not set up yet}"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
       - name: Archive
         if: steps.secrets.outputs.ready == 'true'
         env:
+          DUO_RELAY_URL: ${{ steps.relay.outputs.url }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
@@ -69,7 +86,7 @@ jobs:
           BUILD_NUMBER=$((GITHUB_RUN_NUMBER + 100))
           xcodebuild -project A1Slicer.xcodeproj -scheme A1Slicer -configuration Release \
             -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/A1Slicer.xcarchive" \
-            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CURRENT_PROJECT_VERSION="$BUILD_NUMBER" DUO_RELAY_URL="$DUO_RELAY_URL" \
             -allowProvisioningUpdates \
             -authenticationKeyPath "$KEY_PATH" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
             archive > archive.log 2>&1 || {

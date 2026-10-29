@@ -177,10 +177,20 @@ Paths64 hatch(const Paths64& area, double angleDeg, double sp, double phase = 0)
 
 double area(const Paths64& p) { return Area(p) / (kScale * kScale); }
 
-bool insideBed(const Path64& p, double bw, double bd, double margin) {
+bool insideBed(const Path64& p, const SliceSettings& s, double margin) {
+    bool ex = s.exMaxX > s.exMinX && s.exMaxY > s.exMinY;
+    double x0 = 1e18, y0 = 1e18, x1 = -1e18, y1 = -1e18;
     for (auto& pt : p) {
         double x = pt.x / kScale, y = pt.y / kScale;
-        if (x < margin || y < margin || x > bw - margin || y > bd - margin) return false;
+        if (x < s.bedMinX + margin || y < s.bedMinY + margin || x > s.bedMaxX - margin || y > s.bedMaxY - margin) return false;
+        x0 = std::min(x0, x); x1 = std::max(x1, x); y0 = std::min(y0, y); y1 = std::max(y1, y);
+    }
+    // loops are convex-ish rings around parts: reject any whose box reaches into the no-print box
+    if (ex && !(x1 < s.exMinX - margin || x0 > s.exMaxX + margin || y1 < s.exMinY - margin || y0 > s.exMaxY + margin)) {
+        for (auto& pt : p) {
+            double x = pt.x / kScale, y = pt.y / kScale;
+            if (x > s.exMinX - margin && x < s.exMaxX + margin && y > s.exMinY - margin && y < s.exMaxY + margin) return false;
+        }
     }
     return true;
 }
@@ -375,7 +385,7 @@ PlateSlice slicePlate(const Project& proj, int plateIdx, const SliceSettings& ba
                     Paths64 lp = offset(outer, base.brimGap + w / 2 + k * sp);
                     for (auto& p : lp)
                         if (IsPositive(p)) {
-                            if (insideBed(p, proj.bedW, proj.bedD, 0.5)) b.paths.push_back({Role::Brim, w, true, p});
+                            if (insideBed(p, base, 0.5)) b.paths.push_back({Role::Brim, w, true, p});
                             else edgeClipped = true;
                         }
                 }
@@ -412,7 +422,7 @@ PlateSlice slicePlate(const Project& proj, int plateIdx, const SliceSettings& ba
                 for (int s = base.skirtLoops - 1; s >= 0; --s) {
                     Paths64 lp = InflatePaths({hull}, (base.skirtDistance + w / 2 + s * sp) * kScale, JoinType::Round, EndType::Polygon);
                     for (auto& p : lp) {
-                        if (insideBed(p, proj.bedW, proj.bedD, 0.5)) sk.paths.push_back({Role::Skirt, w, true, p});
+                        if (insideBed(p, base, 0.5)) sk.paths.push_back({Role::Skirt, w, true, p});
                         else edgeClipped = true;
                     }
                 }

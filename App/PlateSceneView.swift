@@ -3,6 +3,7 @@ import SwiftUI
 
 /// 3D view of one plate. Printer coords (x right, y back, z up) map to SceneKit as (x, z, -y).
 struct PlateSceneView: UIViewRepresentable {
+    var bed: PrinterModel.Bed = .a1
     var mesh: SlicerEngine.Mesh?
     var revision: Int
     var colors: [String]
@@ -26,12 +27,17 @@ struct PlateSceneView: UIViewRepresentable {
         v.addGestureRecognizer(tap)
         context.coordinator.view = v
         context.coordinator.buildStatic()
+        context.coordinator.buildBed(bed)
         return v
     }
 
     func updateUIView(_ v: SCNView, context: Context) {
         let c = context.coordinator
         c.parent = self
+        if c.bed != bed {
+            c.buildBed(bed)
+            c.resetCamera()
+        }
         if c.revision != revision || c.colors != colors {
             let first = c.revision < 0
             c.revision = revision
@@ -47,38 +53,61 @@ struct PlateSceneView: UIViewRepresentable {
         weak var view: SCNView?
         var revision = -1
         var colors: [String] = []
+        var bed: PrinterModel.Bed?
         let modelNode = SCNNode()
+        let bedNode = SCNNode()
         var materials: [Int: [SCNMaterial]] = [:]  // object -> materials
 
         init(_ p: PlateSceneView) { parent = p }
 
-        func buildStatic() {
-            guard let scene = view?.scene else { return }
-            let bed = SCNBox(width: 256, height: 2, length: 256, chamferRadius: 2)
+        /// Build plate of the target printer: slab, 16 mm grid and the no-print corner (X1/P1 cutter) if any.
+        func buildBed(_ b: PrinterModel.Bed) {
+            bed = b
+            bedNode.childNodes.forEach { $0.removeFromParentNode() }
+            let x0 = Float(b.x0), y0 = Float(b.y0), x1 = Float(b.x1), y1 = Float(b.y1)
+            let slab = SCNBox(width: CGFloat(x1 - x0), height: 2, length: CGFloat(y1 - y0), chamferRadius: 2)
             let bm = SCNMaterial()
             bm.diffuse.contents = UIColor(red: 0.22, green: 0.24, blue: 0.26, alpha: 1)
             bm.roughness.contents = 0.9
             bm.lightingModel = .physicallyBased
-            bed.materials = [bm]
-            let bedNode = SCNNode(geometry: bed)
-            bedNode.position = SCNVector3(128, -1.01, -128)
-            scene.rootNode.addChildNode(bedNode)
-            // grid
+            slab.materials = [bm]
+            let slabNode = SCNNode(geometry: slab)
+            slabNode.position = SCNVector3((x0 + x1) / 2, -1.01, -(y0 + y1) / 2)
+            bedNode.addChildNode(slabNode)
             var pts: [SCNVector3] = []
             var idx: [Int32] = []
-            for i in 0...16 {
-                let t = Float(i) * 16
-                for (a, b) in [(SCNVector3(t, 0.02, 0), SCNVector3(t, 0.02, -256)), (SCNVector3(0, 0.02, -t), SCNVector3(256, 0.02, -t))] {
-                    idx.append(Int32(pts.count)); pts.append(a)
-                    idx.append(Int32(pts.count)); pts.append(b)
-                }
+            func line(_ a: SCNVector3, _ c: SCNVector3) {
+                idx.append(Int32(pts.count)); pts.append(a)
+                idx.append(Int32(pts.count)); pts.append(c)
             }
+            var gx = (x0 / 16).rounded(.up) * 16
+            while gx <= x1 { line(SCNVector3(gx, 0.02, -y0), SCNVector3(gx, 0.02, -y1)); gx += 16 }
+            var gy = (y0 / 16).rounded(.up) * 16
+            while gy <= y1 { line(SCNVector3(x0, 0.02, -gy), SCNVector3(x1, 0.02, -gy)); gy += 16 }
             let g = SCNGeometry(sources: [SCNGeometrySource(vertices: pts)], elements: [SCNGeometryElement(indices: idx, primitiveType: .line)])
             let gm = SCNMaterial()
             gm.diffuse.contents = UIColor(white: 0.45, alpha: 1)
             gm.lightingModel = .constant
             g.materials = [gm]
-            scene.rootNode.addChildNode(SCNNode(geometry: g))
+            bedNode.addChildNode(SCNNode(geometry: g))
+            if let ex = b.excludeBox {
+                let w = Float(ex.2 - ex.0), d = Float(ex.3 - ex.1)
+                let plane = SCNPlane(width: CGFloat(w), height: CGFloat(d))
+                let pm = SCNMaterial()
+                pm.diffuse.contents = UIColor(red: 0.55, green: 0.12, blue: 0.1, alpha: 0.55)
+                pm.lightingModel = .constant
+                pm.isDoubleSided = true
+                plane.materials = [pm]
+                let n = SCNNode(geometry: plane)
+                n.eulerAngles = SCNVector3(-Float.pi / 2, 0, 0)
+                n.position = SCNVector3(Float(ex.0) + w / 2, 0.05, -(Float(ex.1) + d / 2))
+                bedNode.addChildNode(n)
+            }
+        }
+
+        func buildStatic() {
+            guard let scene = view?.scene else { return }
+            scene.rootNode.addChildNode(bedNode)
             // lights
             let amb = SCNNode(); amb.light = SCNLight(); amb.light!.type = .ambient; amb.light!.intensity = 450
             scene.rootNode.addChildNode(amb)
@@ -96,10 +125,13 @@ struct PlateSceneView: UIViewRepresentable {
 
         func resetCamera() {
             guard let cam = view?.scene?.rootNode.childNode(withName: "cam", recursively: false) else { return }
-            cam.position = SCNVector3(-20, 300, 180)
-            cam.look(at: SCNVector3(128, 0, -128))
+            let b = bed ?? .a1
+            let cx = Float(b.x0 + b.x1) / 2, cy = Float(b.y0 + b.y1) / 2
+            let k = Float(max(b.width, b.depth)) / 256
+            cam.position = SCNVector3(cx - 148 * k, 300 * k, -cy + 308 * k)
+            cam.look(at: SCNVector3(cx, 0, -cy))
             view?.pointOfView = cam
-            view?.defaultCameraController.target = SCNVector3(128, 0, -128)
+            view?.defaultCameraController.target = SCNVector3(cx, 0, -cy)
         }
 
         func rebuildModel() {

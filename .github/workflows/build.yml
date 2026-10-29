@@ -7,15 +7,33 @@ on:
 
 jobs:
   engine:
-    name: Engine self-test
+    name: Engine self-test (all printers)
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - run: ./tools/engine_selftest.sh
 
+  relay:
+    name: Claude relay smoke test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run the relay locally and talk MCP to it
+        working-directory: relay
+        run: |
+          npm ci --no-audit --no-fund
+          npx wrangler dev --port 8787 --ip 127.0.0.1 > dev.log 2>&1 &
+          for i in $(seq 1 60); do curl -s http://127.0.0.1:8787/ > /dev/null && break; sleep 1; done
+          node test/smoke.mjs || { tail -40 dev.log; exit 1; }
+
   app:
-    name: App compiles (simulator, unsigned)
+    name: App compiles + simulator screenshots
     runs-on: macos-15
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - name: Select Xcode 26
@@ -34,12 +52,61 @@ jobs:
         run: |
           set -o pipefail
           xcodebuild -project A1Slicer.xcodeproj -scheme A1Slicer -configuration Debug \
-            -destination 'generic/platform=iOS Simulator' \
-            CODE_SIGNING_ALLOWED=NO build 2>&1 | tee build.log | grep -E "error:|warning: .*(Swift|swift)|BUILD" || true
-          grep -q "BUILD SUCCEEDED" build.log
-      - name: Upload build log
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-log
-          path: build.log
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath build/dd \
+            CODE_SIGNING_ALLOWED=NO build > build.log 2>&1 || true
+          grep -E "error:" build.log | sort -u | head -40 | while IFS= read -r l; do echo "::error::${l:0:900}"; done
+          grep -q "BUILD SUCCEEDED" build.log || { tail -30 build.log; exit 1; }
+      - name: Screenshots
+        run: |
+          APP="build/dd/Build/Products/Debug-iphonesimulator/Duo Slicer.app"
+          BUNDLE=Com.jorgegzuniga.duoslicer
+          mkdir -p shots
+          pick() {  # newest available device whose name matches a pattern
+            xcrun simctl list devices available -j | python3 -c '
+          import json, sys, re
+          pat = re.compile(sys.argv[1])
+          best = None
+          for rt, devs in json.load(sys.stdin)["devices"].items():
+              if "iOS" not in rt: continue
+              for d in devs:
+                  if pat.search(d["name"]): best = (rt, d["udid"], d["name"]) if best is None or rt > best[0] else best
+          print(best[1] if best else "")' "$1"
+          }
+          shoot() {  # device-label udid name args...
+            label=$1; udid=$2; name=$3; shift 3
+            xcrun simctl terminate "$udid" "$BUNDLE" 2>/dev/null || true
+            xcrun simctl launch "$udid" "$BUNDLE" "$@" > /dev/null
+            sleep 14
+            xcrun simctl io "$udid" screenshot "shots/$label-$name.png" > /dev/null 2>&1 && echo "shot $label-$name"
+          }
+          for spec in "iphone:^iPhone 1[0-9] Pro$" "ipad-mini:^iPad mini" "ipad-13:^iPad Pro 13"; do
+            label=${spec%%:*}; pat=${spec#*:}
+            udid=$(pick "$pat")
+            if [ -z "$udid" ]; then echo "::warning::No simulator matching $pat"; continue; fi
+            xcrun simctl boot "$udid" || true
+            xcrun simctl bootstatus "$udid" -b > /dev/null
+            xcrun simctl status_bar "$udid" override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3 2>/dev/null || true
+            xcrun simctl install "$udid" "$APP"
+            shoot "$label" "$udid" home -DuoDemo YES -DuoDemoHome YES -DuoDemoPrinter bambu-x1c
+            shoot "$label" "$udid" plate -DuoDemo YES -DuoDemoPrinter bambu-x1c -DuoDemoPanel plate
+            shoot "$label" "$udid" preview -DuoDemo YES -DuoDemoPrinter bambu-x1c -DuoDemoSlice YES -DuoDemoPanel preview
+            shoot "$label" "$udid" u1-print -DuoDemo YES -DuoDemoPrinter snapmaker-u1 -DuoDemoSlice YES -DuoDemoPanel print
+            shoot "$label" "$udid" settings -DuoDemo YES -DuoDemoPrinter snapmaker-u1 -DuoDemoPanel settings
+            xcrun simctl shutdown "$udid" || true
+          done
+          ls -la shots
+      - name: Publish screenshots to the screenshots branch
+        if: github.event_name == 'push'
+        run: |
+          [ -n "$(ls shots/*.png 2>/dev/null)" ] || exit 0
+          cp -R shots "$RUNNER_TEMP/shots"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan screenshots-publish
+          git rm -rfq .
+          rm -rf build shots
+          cp "$RUNNER_TEMP"/shots/*.png .
+          printf '# Simulator screenshots\n\nFrom %s (%s).\n' "$GITHUB_SHA" "$GITHUB_REF_NAME" > README.md
+          git add -A
+          git commit -qm "Screenshots for $GITHUB_SHA"
+          git push -fq origin HEAD:screenshots

@@ -11,6 +11,7 @@ final class AppModel: ObservableObject {
     @Published var mesh: SlicerEngine.Mesh?
     @Published var meshRevision = 0
     @Published var options = PrintOptions()
+    @Published var toolMapIsCustom = false   // the user picked toolheads by hand
     @Published var effective: [String: String] = [:]
     @Published var slice: SliceSummary?
     @Published var slicedPlate: Int?
@@ -24,23 +25,77 @@ final class AppModel: ObservableObject {
     @Published var previewLayer = 0
     @Published var preview: SlicerEngine.LayerPreview?
     @Published var previewZ = 0.0
+    /// Printer model the plates are sliced for (follows the selected printer).
+    @Published private(set) var target: PrinterModel
 
     private let engine = SlicerEngine()
-    private let queue = DispatchQueue(label: "a1.engine", qos: .userInitiated)
+    private let queue = DispatchQueue(label: "duo.engine", qos: .userInitiated)
+    private var engineTarget = ""
 
-    init() { loadRecents() }
+    init() {
+        let saved = UserDefaults.standard.string(forKey: "target.model") ?? PrinterCatalog.fallbackID
+        target = PrinterCatalog.model(saved) ?? PrinterCatalog.model(PrinterCatalog.fallbackID) ?? PrinterModel(
+            id: PrinterCatalog.fallbackID, vendor: "Bambu Lab", name: "Bambu Lab A1", kind: "bambu", machineName: "", modelId: "N2S",
+            nozzle: 0.4, tools: 1, bed: .a1, defaultProcess: "")
+        loadRecents()
+    }
 
     var plate: PlateInfo? {
         guard let p = project, plateIndex >= 0, plateIndex < p.plates.count else { return nil }
         return p.plates[plateIndex]
     }
 
+    var bed: PrinterModel.Bed { project?.printer?.bed ?? target.bed }
     var sliceIsCurrent: Bool { slice != nil && slicedPlate == plateIndex }
 
     private func run<T>(_ work: @escaping (SlicerEngine) -> T) async -> T {
         let engine = self.engine
         return await withCheckedContinuation { cont in
             queue.async { cont.resume(returning: work(engine)) }
+        }
+    }
+
+    // MARK: target printer
+
+    /// Make sure the engine has a printer before opening or slicing.
+    private func ensureEngineTarget() async {
+        guard engineTarget != target.id else { return }
+        let id = target.id
+        let r: Result<ProjectInfo?, Error> = await run { eng in
+            do { return .success(try eng.setPrinter(id)) } catch { return .failure(error) }
+        }
+        if case .failure(let e) = r { errorMessage = e.localizedDescription; return }
+        engineTarget = id
+    }
+
+    /// Slice for another printer model: re-places the plates on its bed and swaps to its presets.
+    func setTarget(_ id: String) async {
+        guard let m = PrinterCatalog.model(id), m.id != target.id || engineTarget != m.id else { return }
+        target = m
+        UserDefaults.standard.set(m.id, forKey: "target.model")
+        let r: Result<ProjectInfo?, Error> = await run { eng in
+            do { return .success(try eng.setPrinter(m.id)) } catch { return .failure(error) }
+        }
+        switch r {
+        case .failure(let e):
+            errorMessage = e.localizedDescription
+        case .success(let info):
+            engineTarget = m.id
+            guard let info else { return }
+            project = info
+            // quality and filament presets are per printer; colours, tweaks and plate choice carry over
+            options.process = info.defaultProcess
+            options.filaments = info.filaments.map { $0.preset }
+            if let bt = options.overrides["curr_bed_type"], !(info.printer?.bedTypes ?? []).contains(bt) {
+                options.overrides["curr_bed_type"] = info.bedType
+            }
+            options.toolMap = []
+            toolMapIsCustom = false
+            slice = nil
+            slicedPlate = nil
+            preview = nil
+            await refreshMesh()
+            await refreshEffective()
         }
     }
 
@@ -93,6 +148,7 @@ final class AppModel: ObservableObject {
     func load(data: Data, name: String) async {
         busy = true
         defer { busy = false }
+        await ensureEngineTarget()
         let result: Result<ProjectInfo, Error> = await run { eng in
             do { return .success(try eng.open(data)) } catch { return .failure(error) }
         }
@@ -107,10 +163,11 @@ final class AppModel: ObservableObject {
             slice = nil
             slicedPlate = nil
             preview = nil
+            toolMapIsCustom = false
             options = PrintOptions(process: info.defaultProcess,
                                    filaments: info.filaments.map { $0.preset },
                                    colors: info.filaments.map { $0.color },
-                                   overrides: ["curr_bed_type": "Textured PEI Plate"])
+                                   overrides: ["curr_bed_type": info.bedType])
             let count = info.plates.count
             let thumbs: [Int: UIImage] = await run { eng in
                 var t: [Int: UIImage] = [:]
@@ -136,6 +193,7 @@ final class AppModel: ObservableObject {
         guard i != plateIndex else { return }
         plateIndex = i
         selectedObject = nil
+        if !toolMapIsCustom { options.toolMap = [] }
         await refreshMesh()
         if slicedPlate == i { await loadPreview() }
     }
@@ -155,6 +213,10 @@ final class AppModel: ObservableObject {
 
     func rotate(axis: Int, degrees: Double) async {
         guard let o = selectedObject else { return }
+        await rotate(object: o, axis: axis, degrees: degrees)
+    }
+
+    func rotate(object o: Int, axis: Int, degrees: Double) async {
         await run { $0.rotate(object: o, axis: axis, degrees: degrees) }
         await afterTransform()
     }
@@ -167,13 +229,28 @@ final class AppModel: ObservableObject {
 
     func autoFlat() async {
         guard let o = selectedObject else { return }
+        await autoFlat(object: o)
+    }
+
+    func autoFlat(object o: Int) async {
         await run { $0.autoFlat(object: o) }
         await afterTransform()
     }
 
     func resetObject() async {
         guard let o = selectedObject else { return }
+        await resetObject(o)
+    }
+
+    func resetObject(_ o: Int) async {
         await run { $0.reset(object: o) }
+        await afterTransform()
+    }
+
+    /// Move the plate's parts to the middle of the target printer's bed.
+    func centerPlate() async {
+        let p = plateIndex
+        await run { $0.centerPlate(p) }
         await afterTransform()
     }
 
@@ -224,7 +301,63 @@ final class AppModel: ObservableObject {
         if slice != nil { slice = nil; slicedPlate = nil; preview = nil }
     }
 
+    // MARK: toolheads (tool changers)
+
+    /// Toolhead currently assigned to a project filament (1-based), or nil when the engine picks.
+    func tool(for filament: Int) -> Int? {
+        let i = filament - 1
+        if i < options.toolMap.count, options.toolMap[i] >= 0 { return options.toolMap[i] }
+        if let m = plate?.toolMap, i < m.count, m[i] >= 0 { return m[i] }
+        return nil
+    }
+
+    func setTool(_ head: Int, for filament: Int) {
+        let n = project?.filaments.count ?? 0
+        // pin every filament on the plate to its current head first, so swapping one doesn't shuffle the rest
+        if options.toolMap.count < n { options.toolMap += Array(repeating: -1, count: n - options.toolMap.count) }
+        for f in plate?.filaments ?? [] where f - 1 < options.toolMap.count && options.toolMap[f - 1] < 0 {
+            options.toolMap[f - 1] = self.tool(for: f) ?? -1
+        }
+        // one filament per head: the filament that had this head takes the other one's old head
+        let old = self.tool(for: filament)
+        for f in plate?.filaments ?? [] where f != filament && self.tool(for: f) == head {
+            if f - 1 < options.toolMap.count { options.toolMap[f - 1] = old ?? -1 }
+        }
+        if filament - 1 < options.toolMap.count { options.toolMap[filament - 1] = head }
+        toolMapIsCustom = true
+        invalidateSlice()
+    }
+
+    /// Apply a suggested head for each filament on this plate (unless the user already chose).
+    func applySuggestedToolMap(_ map: [Int: Int]) {
+        guard !toolMapIsCustom, !map.isEmpty else { return }
+        let n = project?.filaments.count ?? 0
+        var tm = Array(repeating: -1, count: n)
+        for (f, t) in map where f >= 1 && f <= n { tm[f - 1] = t }
+        if tm != options.toolMap {
+            options.toolMap = tm
+            invalidateSlice()
+        }
+    }
+
     // MARK: slicing
+
+    /// PNG thumbnails Klipper printers show on their screen (48 and 300 px squares).
+    private func gcodeThumbnails() -> [Data] {
+        guard target.isToolChanger, let img = thumbnails[plateIndex] else { return [] }
+        return [48, 300].map { side in
+            let fmt = UIGraphicsImageRendererFormat()
+            fmt.scale = 1
+            fmt.opaque = false
+            let r = UIGraphicsImageRenderer(size: CGSize(width: side, height: side), format: fmt)
+            return r.pngData { _ in
+                let s = img.size
+                let k = min(CGFloat(side) / max(1, s.width), CGFloat(side) / max(1, s.height))
+                let w = s.width * k, h = s.height * k
+                img.draw(in: CGRect(x: (CGFloat(side) - w) / 2, y: (CGFloat(side) - h) / 2, width: w, height: h))
+            }
+        }
+    }
 
     func sliceCurrent() async {
         guard !slicing else { return }
@@ -232,10 +365,12 @@ final class AppModel: ObservableObject {
         sliceProgress = 0
         slice = nil
         preview = nil
+        await ensureEngineTarget()
         let plate = plateIndex
         let opts = options
+        let thumbs = gcodeThumbnails()
         let summary: SliceSummary = await run { eng in
-            eng.slice(plate: plate, options: opts) { p in
+            eng.slice(plate: plate, options: opts, thumbnails: thumbs) { p in
                 Task { @MainActor [weak self] in self?.sliceProgress = p }
             }
         }
@@ -260,6 +395,8 @@ final class AppModel: ObservableObject {
 
     func slicedFile() async -> Data? { await run { $0.slicedFile() } }
 
+    var jobName: String { "\(fileName) \(plate?.name ?? "")" }
+
     func exportProjectFile() async -> URL? {
         guard let data = await run({ $0.exportProject() }) else { return nil }
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(fileName)-edited.3mf")
@@ -270,9 +407,17 @@ final class AppModel: ObservableObject {
 
     func exportSlicedFile() async -> URL? {
         guard let data = await slicedFile(), let s = slice else { return nil }
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(fileName)-plate\(s.plateId ?? 1).gcode.3mf")
+        let ext = s.isPlainGcode ? "gcode" : "gcode.3mf"
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(fileName)-plate\(s.plateId ?? 1).\(ext)")
         try? FileManager.default.removeItem(at: url)
         do { try data.write(to: url) } catch { return nil }
         return url
+    }
+
+    /// Send the current slice to the selected printer.
+    func sendCurrentSlice(to printer: PrinterLink, mapping: [Int: Int], options start: StartOptions) async throws {
+        guard let s = slice, sliceIsCurrent else { throw SlicerEngine.EngineError.message("Slice this plate first.") }
+        guard let data = await slicedFile() else { throw SlicerEngine.EngineError.message("The sliced file is missing. Slice again.") }
+        try await printer.startPrint(file: data, summary: s, jobName: jobName, mapping: mapping, options: start)
     }
 }

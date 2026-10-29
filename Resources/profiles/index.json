@@ -1,0 +1,300 @@
+[
+ {
+  "id": "bambu-a1",
+  "vendor": "Bambu Lab",
+  "name": "Bambu Lab A1",
+  "kind": "bambu",
+  "machine_name": "Bambu Lab A1 0.4 nozzle",
+  "model_id": "N2S",
+  "nozzle": 0.4,
+  "tools": 1,
+  "bed": {
+   "min": [
+    0.0,
+    0.0
+   ],
+   "max": [
+    256.0,
+    256.0
+   ],
+   "height": 256.0,
+   "exclude": []
+  },
+  "default_process": "0.20mm Standard @BBL A1"
+ },
+ {
+  "id": "bambu-a1-mini",
+  "vendor": "Bambu Lab",
+  "name": "Bambu Lab A1 mini",
+  "kind": "bambu",
+  "machine_name": "Bambu Lab A1 mini 0.4 nozzle",
+  "model_id": "N1",
+  "nozzle": 0.4,
+  "tools": 1,
+  "bed": {
+   "min": [
+    0.0,
+    0.0
+   ],
+   "max": [
+    180.0,
+    180.0
+   ],
+   "height": 180.0,
+   "exclude": []
+  },
+  "default_process": "0.20mm Standard @BBL A1M"
+ },
+ {
+  "id": "bambu-a2l",
+  "vendor": "Bambu Lab",
+  "name": "Bambu Lab A2L",
+  "kind": "bambu",
+  "machine_name": "Bambu Lab A2L 0.4 nozzle",
+  "model_id": "N9",
+  "nozzle": 0.4,
+  "tools": 1,
+  "bed": {
+   "min": [
+    0.0,
+    0.0
+   ],
+   "max": [
+    330.0,
+    320.0
+   ],
+   "height": 325.0,
+   "exclude": []
+  },
+  "default_process": "0.20mm Standard @BBL A2L"
+ },
+ {
+  "id": "bambu-p1p",
+  "vendor": "Bambu Lab",
+  "name": "Bambu Lab P1P",
+  "kind": "bambu",
+  "machine_name": "Bambu Lab P1P 0.4 nozzle",
+  "model_id": "C11",
+  "nozzle": 0.4,
+  "tools": 1,
+  "bed": {
+   "min": [
+    0.0,
+    0.0
+   ],
+   "max": [
+    256.0,
+    256.0
+   ],
+   "height": 250.0,
+   "exclude": [
+    [
+     0.0,
+     0.0
+    ],
+    [
+     18.0,
+     28.0
+    ]
+   ]
+  },
+  "default_process": "0.20mm Standard @BBL P1P"
+ },
+ {
+  "id": "bambu-p1s",
+  "vendor": "Bambu Lab",
+  "name": "Bambu Lab P1S",
+  "kind": "bambu",
+  "machine_name": "Bambu Lab P1S 0.4 nozzle",
+  "model_id": "C12",
+  "nozzle": 0.4,
+  "tools": 1,
+  "bed": {
+   "min": [
+    0.0,
+    0.0
+   ],
+   "max": [
+    256.0,
+    256.0
+   ],
+   "height": 250.0,
+   "exclude": [
+    [
+     0.0,
+     0.0
+    ],
+    [
+     18.0,
+     28.0
+    ]
+   ]
+  },
+  "default_process": "0.20mm Standard @BBL X1C"
+ },
+ {
+  "id": "bambu-p2s",
+  "vendor": "Bambu Lab",
+  "name": "Bambu Lab P2S",
+  "kind": "bambu",
+  "machine_name": "Bambu Lab P2S 0.4 nozzle",
+  "model_id": "N7",
+  "nozzle": 0.4,
+  "tools": 1,
+  "bed": {
+   "min": [
+    0.0,
+    0.0
+   ],
+   "max": [
+    256.0,
+    256.0
+   ],
+   "height": 256.0,
+   "exclude": []
+  },
+  "default_process": "0.20mm Standard @BBL P2S"
+ },
+ {
+  "id": "bambu-x1",
+  "vendor": "Bambu Lab",
+  "name": "Bambu Lab X1",
+  "kind": "bambu",
+  "machine_name": "Bambu Lab X1 0.4 nozzle",
+  "model_id": "BL-P002",
+  "nozzle": 0.4,
+  "tools": 1,
+  "bed": {
+   "min": [
+    0.0,
+    0.0
+   ],
+   "max": [
+    256.0,
+    256.0
+   ],
+   "height": 250.0,
+   "exclude": [
+    [
+     0.0,
+     0.0
+    ],
+    [
+     18.0,
+     28.0
+    ]
+   ]
+  },
+  "default_process": "0.20mm Standard @BBL X1C"
+ },
+ {
+  "id": "bambu-x1c",
+  "vendor": "Bambu Lab",
+  "name": "Bambu Lab X1 Carbon",
+  "kind": "bambu",
+  "machine_name": "Bambu Lab X1 Carbon 0.4 nozzle",
+  "model_id": "BL-P001",
+  "nozzle": 0.4,
+  "tools": 1,
+  "bed": {
+   "min": [
+    0.0,
+    0.0
+   ],
+   "max": [
+    256.0,
+    256.0
+   ],
+   "height": 250.0,
+   "exclude": [
+    [
+     0.0,
+     0.0
+    ],
+    [
+     18.0,
+     28.0
+    ]
+   ]
+  },
+  "default_process": "0.20mm Standard @BBL X1C"
+ },
+ {
+  "id": "bambu-x1e",
+  "vendor": "Bambu Lab",
+  "name": "Bambu Lab X1E",
+  "kind": "bambu",
+  "machine_name": "Bambu Lab X1E 0.4 nozzle",
+  "model_id": "C13",
+  "nozzle": 0.4,
+  "tools": 1,
+  "bed": {
+   "min": [
+    0.0,
+    0.0
+   ],
+   "max": [
+    256.0,
+    256.0
+   ],
+   "height": 250.0,
+   "exclude": [
+    [
+     0.0,
+     0.0
+    ],
+    [
+     18.0,
+     28.0
+    ]
+   ]
+  },
+  "default_process": "0.20mm Standard @BBL X1C"
+ },
+ {
+  "id": "bambu-h2s",
+  "vendor": "Bambu Lab",
+  "name": "Bambu Lab H2S",
+  "kind": "bambu",
+  "machine_name": "Bambu Lab H2S 0.4 nozzle",
+  "model_id": "O1S",
+  "nozzle": 0.4,
+  "tools": 1,
+  "bed": {
+   "min": [
+    0.0,
+    0.0
+   ],
+   "max": [
+    340.0,
+    320.0
+   ],
+   "height": 340.0,
+   "exclude": []
+  },
+  "default_process": "0.20mm Standard @BBL H2S"
+ },
+ {
+  "id": "snapmaker-u1",
+  "vendor": "Snapmaker",
+  "name": "Snapmaker U1",
+  "kind": "klipper_toolchanger",
+  "machine_name": "Snapmaker U1 (0.4 nozzle)",
+  "model_id": "797581801",
+  "nozzle": 0.4,
+  "tools": 4,
+  "bed": {
+   "min": [
+    0.5,
+    1.0
+   ],
+   "max": [
+    270.5,
+    271.0
+   ],
+   "height": 270.05,
+   "exclude": []
+  },
+  "default_process": "0.20 Standard @Snapmaker U1 (0.4 nozzle)"
+ }
+]

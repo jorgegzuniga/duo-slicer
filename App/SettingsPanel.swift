@@ -9,13 +9,11 @@ struct ChoiceOption: Identifiable, Hashable {
 struct SettingsPanel: View {
     @EnvironmentObject var model: AppModel
 
-    private let bedTypes: [ChoiceOption] = [
-        ChoiceOption(value: "Textured PEI Plate", label: "Textured PEI (A1 stock)"),
-        ChoiceOption(value: "High Temp Plate", label: "Smooth PEI / High Temp"),
-        ChoiceOption(value: "Cool Plate", label: "Cool Plate"),
-        ChoiceOption(value: "Supertack Plate", label: "Cool Plate SuperTack"),
-        ChoiceOption(value: "Engineering Plate", label: "Engineering Plate"),
-    ]
+    /// Plate types the target printer's filament presets have temperatures for.
+    private var bedTypes: [ChoiceOption] {
+        let types = model.project?.printer?.bedTypes ?? ["Textured PEI Plate"]
+        return types.map { ChoiceOption(value: $0, label: bedTypeLabel($0)) }
+    }
     private let brims: [ChoiceOption] = [
         ChoiceOption(value: "auto_brim", label: "Auto (none)"),
         ChoiceOption(value: "no_brim", label: "No brim"),
@@ -30,15 +28,23 @@ struct SettingsPanel: View {
 
     var body: some View {
         Form {
-            Section("Quality") {
+            Section {
                 Picker("Preset", selection: Binding(get: { model.options.process }, set: { v in Task { await model.setProcess(v) } })) {
                     ForEach(sortedProcesses, id: \.self) {
-                        Text($0.replacingOccurrences(of: " @BBL A1", with: "")).tag($0)
+                        Text(presetDisplayName($0)).tag($0)
                     }
                 }
-                Picker("Build plate", selection: stringBinding("curr_bed_type", "Textured PEI Plate")) {
-                    ForEach(bedTypes) { Text($0.label).tag($0.value) }
+                if bedTypes.count > 1 {
+                    Picker("Build plate", selection: stringBinding("curr_bed_type", bedTypes.first?.value ?? "Textured PEI Plate")) {
+                        ForEach(bedTypes) { Text($0.label).tag($0.value) }
+                    }
+                } else if let only = bedTypes.first {
+                    LabeledContent("Build plate", value: only.label)
                 }
+            } header: {
+                Text("Quality")
+            } footer: {
+                Text("Presets for the \(model.target.name).")
             }
             Section("Strength") {
                 Stepper("Walls: \(intValue("wall_loops", 2))", value: intBinding("wall_loops", 2), in: 1...10)

@@ -46,7 +46,8 @@ struct Plate {
     int id = 1;
     std::string name;
     std::string thumb;  // zip path
-    double ox = 0, oy = 0;
+    double ox = 0, oy = 0;    // world -> target printer bed offset (changes with the target printer)
+    double ox0 = 0, oy0 = 0;  // world -> project bed offset (as laid out in the file)
     std::vector<int> objects;  // indices into objects
 };
 
@@ -57,7 +58,8 @@ struct Project {
     std::vector<std::string> colors, types, settingIds;
     std::unique_ptr<ZipReader> zip;
     std::string printerModel;
-    double bedW = 256, bedD = 256;
+    double bedX0 = 0, bedY0 = 0, bedW = 256, bedD = 256;  // project printer's printable area
+    bool hasBed = false;                                // printable_area came from the file
 
     static std::unique_ptr<Project> load(const std::string& bytes);
     // Triangles of every volume on a plate in plate-local (printer) coordinates.

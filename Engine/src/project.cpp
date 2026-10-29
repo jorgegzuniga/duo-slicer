@@ -175,7 +175,7 @@ std::unique_ptr<Project> Project::load(const std::string& bytes) {
             double x = std::atof(t.substr(0, xp).c_str()), y = std::atof(t.substr(xp + 1).c_str());
             x0 = std::min(x0, x); x1 = std::max(x1, x); y0 = std::min(y0, y); y1 = std::max(y1, y);
         }
-        if (x1 > x0 && y1 > y0) { P->bedW = x1 - x0; P->bedD = y1 - y0; }
+        if (x1 > x0 && y1 > y0) { P->bedX0 = x0; P->bedY0 = y0; P->bedW = x1 - x0; P->bedD = y1 - y0; P->hasBed = true; }
     }
 
     // meshes
@@ -283,8 +283,8 @@ std::unique_ptr<Project> Project::load(const std::string& bytes) {
         pl.id = plateDefs[i].id;
         pl.name = plateDefs[i].name.empty() ? "Plate " + std::to_string(pl.id) : plateDefs[i].name;
         pl.thumb = z.has(plateDefs[i].thumb) ? plateDefs[i].thumb : "";
-        pl.ox = (i % cols) * sx;
-        pl.oy = -(double)(i / cols) * sy;
+        pl.ox = pl.ox0 = (i % cols) * sx;
+        pl.oy = pl.oy0 = -(double)(i / cols) * sy;
         P->plates.push_back(pl);
     }
 

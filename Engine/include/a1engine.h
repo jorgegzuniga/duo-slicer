@@ -1,4 +1,4 @@
-// C interface to the A1 slicing engine (used from Swift).
+// C interface to the Duo Slicer engine (used from Swift and the command-line tools).
 // All functions returning char* give a heap JSON string; free it with a1_free.
 #ifndef A1ENGINE_H
 #define A1ENGINE_H
@@ -13,9 +13,14 @@ extern "C" {
 typedef struct A1Engine A1Engine;
 typedef void (*A1Progress)(double fraction, void* ctx);
 
-A1Engine* a1_create(const char* profilesJson);
+// printerBundle: one Resources/profiles/<printer>.json (may be NULL; then call a1_set_printer before opening).
+A1Engine* a1_create(const char* printerBundle);
 void a1_destroy(A1Engine* e);
 void a1_free(void* p);
+
+// Switch the target printer. Plates are re-placed on its bed (project bed centre -> printer bed centre).
+// Returns {"ok":true,"project":{...}} (or {"ok":true,"printer":{...}} with no project open) or {"error":"..."}.
+char* a1_set_printer(A1Engine* e, const char* printerBundle);
 
 // Load a .3mf (or .3mf.zip). Returns {"ok":true,"project":{...}} or {"error":"..."}.
 char* a1_open(A1Engine* e, const uint8_t* data, size_t len);
@@ -35,6 +40,8 @@ int a1_lay_flat(A1Engine* e, int objectIndex, double nx, double ny, double nz);
 // Place the largest flat face of an object on the bed.
 int a1_auto_flat(A1Engine* e, int objectIndex);
 int a1_reset_transform(A1Engine* e, int objectIndex);
+// Move every object on a plate so the group sits in the middle of the target printer's bed.
+int a1_center_plate(A1Engine* e, int plate);
 
 // Triangles of a plate in printer coordinates: xyz (9 floats per triangle), fil (1 byte per triangle, 1-based filament),
 // obj (int32 object index per triangle). Free each buffer with a1_free.
@@ -42,9 +49,12 @@ int a1_plate_mesh(A1Engine* e, int plate, float** xyz, uint8_t** fil, int32_t** 
 // PNG thumbnail stored in the 3MF for a plate (may be absent -> returns -1).
 int a1_plate_thumbnail(A1Engine* e, int plate, uint8_t** data, size_t* len);
 
-// Slice one plate. Returns summary JSON: {"ok":true,"seconds":..,"grams":..,"layers":..,"filaments":[...],"warnings":[...]}.
+// Slice one plate for the target printer. Options: {"process", "filaments":[preset per project filament], "colors":[...],
+// "overrides":{key:value}, "tool_map":[toolhead per project filament] (tool changers), "tool_filaments":[{"type","color"}] per toolhead,
+// "thumbnails":[base64 PNG]}.
+// Returns {"ok":true,"file_kind":"gcode.3mf"|"gcode","seconds":..,"grams":..,"layers":..,"filaments":[...],"tool_map":[...],"warnings":[...]}.
 char* a1_slice(A1Engine* e, int plate, const char* optionsJson, A1Progress progress, void* ctx);
-// The last sliced plate as a Bambu .gcode.3mf archive.
+// The last sliced plate: a Bambu .gcode.3mf archive, or plain G-code for Klipper printers (see file_kind).
 int a1_sliced_file(A1Engine* e, uint8_t** data, size_t* len);
 // The project re-saved with current orientations (normal .3mf).
 int a1_export_project(A1Engine* e, uint8_t** data, size_t* len);

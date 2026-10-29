@@ -5,10 +5,11 @@ import UIKit
 final class SlicerEngine {
     private let handle: OpaquePointer
 
+    /// The printer the engine slices for (PrinterModel.id); empty until setPrinter succeeds.
+    private(set) var printerID = ""
+
     init() {
-        let url = Bundle.main.url(forResource: "a1-profiles", withExtension: "json")
-        let text = url.flatMap { try? String(contentsOf: $0, encoding: .utf8) } ?? "{}"
-        handle = a1_create(text)!
+        handle = a1_create(nil)!
     }
 
     deinit { a1_destroy(handle) }
@@ -26,6 +27,17 @@ final class SlicerEngine {
 
     private func errorIn(_ data: Data) -> String? {
         (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["error"] as? String
+    }
+
+    /// Switch the target printer. Returns the re-placed project when one is open.
+    @discardableResult
+    func setPrinter(_ id: String) throws -> ProjectInfo? {
+        guard let bundle = PrinterCatalog.bundleJSON(id) else { throw EngineError.message("Profiles for that printer are missing from the app.") }
+        let out = take(a1_set_printer(handle, bundle))
+        if let e = errorIn(out) { throw EngineError.message(e) }
+        printerID = id
+        struct Wrap: Decodable { let project: ProjectInfo? }
+        return try JSONCoding.decoder.decode(Wrap.self, from: out).project
     }
 
     func open(_ data: Data) throws -> ProjectInfo {
@@ -52,6 +64,7 @@ final class SlicerEngine {
     func layFlat(object: Int, normal: SIMD3<Double>) { _ = a1_lay_flat(handle, Int32(object), normal.x, normal.y, normal.z) }
     func autoFlat(object: Int) { _ = a1_auto_flat(handle, Int32(object)) }
     func reset(object: Int) { _ = a1_reset_transform(handle, Int32(object)) }
+    func centerPlate(_ plate: Int) { _ = a1_center_plate(handle, Int32(plate)) }
 
     struct Mesh {
         var positions: [Float]   // 9 per triangle, printer coordinates (mm)
@@ -84,7 +97,7 @@ final class SlicerEngine {
         init(_ fn: @escaping (Double) -> Void) { self.fn = fn }
     }
 
-    func slice(plate: Int, options: PrintOptions, progress: @escaping (Double) -> Void) -> SliceSummary {
+    func slice(plate: Int, options: PrintOptions, thumbnails: [Data] = [], progress: @escaping (Double) -> Void) -> SliceSummary {
         let box = ProgressBox(progress)
         let ctx = Unmanaged.passRetained(box).toOpaque()
         defer { Unmanaged<ProgressBox>.fromOpaque(ctx).release() }
@@ -92,7 +105,8 @@ final class SlicerEngine {
             guard let ctx else { return }
             Unmanaged<ProgressBox>.fromOpaque(ctx).takeUnretainedValue().fn(fraction)
         }
-        let out = take(a1_slice(handle, Int32(plate), options.json(), cb, ctx))
+        let extra: [String: Any] = thumbnails.isEmpty ? [:] : ["thumbnails": thumbnails.map { $0.base64EncodedString() }]
+        let out = take(a1_slice(handle, Int32(plate), options.json(extra: extra), cb, ctx))
         return (try? JSONCoding.decoder.decode(SliceSummary.self, from: out)) ?? SliceSummary(error: "The slicer returned an unreadable result.")
     }
 

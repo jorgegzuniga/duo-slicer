@@ -26,7 +26,10 @@ targets:
         excludes:
           - "LICENSE"
       - path: Engine/third_party/nlohmann
-      - path: Resources/a1-profiles.json
+      - path: Resources/profiles
+        type: folder
+        buildPhase: resources
+      - path: Resources/demo.3mf
         buildPhase: resources
       - path: Resources/Assets.xcassets
     dependencies:
@@ -41,7 +44,10 @@ targets:
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
         UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
-        NSLocalNetworkUsageDescription: Duo Slicer connects to your Bambu Lab A1 on your Wi-Fi to send prints and show their progress.
+        NSLocalNetworkUsageDescription: Duo Slicer connects to your Bambu Lab or Snapmaker printer on your Wi-Fi to send prints and show their progress.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        DuoRelayURL: $(DUO_RELAY_URL)
         ITSAppUsesNonExemptEncryption: false
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: false
@@ -59,6 +65,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: Com.jorgegzuniga.duoslicer
+        DUO_RELAY_URL: ""
         PRODUCT_NAME: Duo Slicer
         SWIFT_OBJC_BRIDGING_HEADER: App/A1Slicer-Bridging-Header.h
         HEADER_SEARCH_PATHS:

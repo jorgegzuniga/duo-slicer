@@ -5,6 +5,20 @@ enum Panel: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+/// How the project screen is arranged for the space it has.
+/// Folded iPhone (and Split View slivers): one column with a panel under the 3D view.
+/// iPhone Duo unfolded, iPad portrait: 3D view and panels side by side, split at the middle so the fold falls on the divider.
+/// Wide windows (iPad landscape, a large external display): a plates sidebar, the 3D view and the panels.
+enum ProjectLayout: Equatable {
+    case compact, split, threePane
+
+    init(size: CGSize) {
+        if size.width >= 1050 { self = .threePane }
+        else if size.width >= 640 { self = .split }
+        else { self = .compact }
+    }
+}
+
 struct ProjectView: View {
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var printer: PrinterLink
@@ -14,46 +28,16 @@ struct ProjectView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                PlateStrip()
-                ZStack(alignment: .top) {
-                    if panel == .preview && model.sliceIsCurrent {
-                        LayerPreviewView()
-                    } else {
-                        PlateSceneView(mesh: model.mesh, revision: model.meshRevision, colors: model.options.colors, selected: model.selectedObject,
-                                       pickFace: pickFace,
-                                       onSelect: { obj in model.selectedObject = obj; if obj == nil { pickFace = false } },
-                                       onFace: { _, n in pickFace = false; Task { await model.layFlat(normal: n) } })
-                            .ignoresSafeArea(edges: .horizontal)
-                        if model.selectedObject != nil { OrientBar(pickFace: $pickFace).padding(.top, 8) }
-                        if pickFace {
-                            Text("Tap the face that should sit on the bed")
-                                .font(.footnote.weight(.medium))
-                                .padding(.horizontal, 12).padding(.vertical, 8)
-                                .background(.thinMaterial, in: Capsule())
-                                .padding(.top, 60)
-                        }
-                    }
-                }
-                .frame(maxHeight: .infinity)
-                .layoutPriority(1)
-
-                Picker("Panel", selection: $panel) {
-                    ForEach(Panel.allCases) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .padding(.horizontal)
-                .padding(.vertical, 8)
-
+            GeometryReader { geo in
+                let layout = ProjectLayout(size: geo.size)
                 Group {
-                    switch panel {
-                    case .plate: PlatePanel()
-                    case .settings: SettingsPanel()
-                    case .preview: PreviewPanel()
-                    case .print: PrintPanel()
+                    switch layout {
+                    case .compact: compact
+                    case .split: split(geo.size)
+                    case .threePane: threePane
                     }
                 }
-                .frame(height: 330)
+                .animation(.snappy, value: layout)
             }
             .navigationTitle(model.fileName)
             .navigationBarTitleDisplayMode(.inline)
@@ -63,6 +47,9 @@ struct ProjectView: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
+                        Button {
+                            Task { await model.centerPlate() }
+                        } label: { Label("Center plate on bed", systemImage: "arrow.up.and.down.and.arrow.left.and.right") }
                         Button {
                             Task { shareURL = await model.exportProjectFile() }
                         } label: { Label("Share edited 3MF", systemImage: "square.and.arrow.up") }
@@ -78,7 +65,137 @@ struct ProjectView: View {
                 ShareSheet(items: [item.url])
             }
             .onChange(of: model.slice?.ok) { _, ok in if ok == true { panel = .preview } }
+            .onReceive(NotificationCenter.default.publisher(for: .duoDemoPanel)) { n in
+                if let s = n.object as? String, let p = Panel(rawValue: s) { panel = p }
+            }
+            .background(PanelShortcuts(panel: $panel))
         }
+    }
+
+    // MARK: arrangements
+
+    var compact: some View {
+        VStack(spacing: 0) {
+            PlateStrip()
+            canvas
+                .frame(maxHeight: .infinity)
+                .layoutPriority(1)
+            panelPicker
+            panelContent
+                .frame(height: 330)
+        }
+    }
+
+    func split(_ size: CGSize) -> some View {
+        // near-square (an unfolded iPhone Duo): split evenly so the fold sits on the divider
+        let aspect = size.width / max(1, size.height)
+        let left = (0.8...1.3).contains(aspect) ? size.width / 2 : max(size.width - 400, size.width * 0.5)
+        return HStack(spacing: 0) {
+            VStack(spacing: 0) {
+                PlateStrip()
+                canvas
+            }
+            .frame(width: left)
+            Divider()
+            inspector
+        }
+    }
+
+    var threePane: some View {
+        HStack(spacing: 0) {
+            PlateSidebar()
+                .frame(width: 250)
+            Divider()
+            canvas
+            Divider()
+            inspector
+                .frame(width: 400)
+        }
+    }
+
+    // MARK: pieces
+
+    var canvas: some View {
+        ZStack(alignment: .top) {
+            if panel == .preview && model.sliceIsCurrent {
+                LayerPreviewView()
+            } else {
+                PlateSceneView(bed: model.bed, mesh: model.mesh, revision: model.meshRevision, colors: model.options.colors, selected: model.selectedObject,
+                               pickFace: pickFace,
+                               onSelect: { obj in model.selectedObject = obj; if obj == nil { pickFace = false } },
+                               onFace: { _, n in pickFace = false; Task { await model.layFlat(normal: n) } })
+                    .ignoresSafeArea(edges: .horizontal)
+                if model.selectedObject != nil { OrientBar(pickFace: $pickFace).padding(.top, 8) }
+                if pickFace {
+                    Text("Tap the face that should sit on the bed")
+                        .font(.footnote.weight(.medium))
+                        .padding(.horizontal, 12).padding(.vertical, 8)
+                        .background(.thinMaterial, in: Capsule())
+                        .padding(.top, 60)
+                }
+            }
+        }
+    }
+
+    var panelPicker: some View {
+        Picker("Panel", selection: $panel) {
+            ForEach(Panel.allCases) { Text($0.rawValue).tag($0) }
+        }
+        .pickerStyle(.segmented)
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+    }
+
+    @ViewBuilder var panelContent: some View {
+        switch panel {
+        case .plate: PlatePanel()
+        case .settings: SettingsPanel()
+        case .preview: PreviewPanel()
+        case .print: PrintPanel()
+        }
+    }
+
+    var inspector: some View {
+        VStack(spacing: 0) {
+            panelPicker
+            panelContent
+                .frame(maxHeight: .infinity)
+        }
+        .background(Color(.systemGroupedBackground))
+    }
+}
+
+/// ⌘1–⌘4 switch panels when a keyboard is attached.
+struct PanelShortcuts: View {
+    @Binding var panel: Panel
+
+    var body: some View {
+        ZStack {
+            ForEach(Array(Panel.allCases.enumerated()), id: \.element) { i, p in
+                Button(p.rawValue) { panel = p }
+                    .keyboardShortcut(KeyEquivalent(Character(String(i + 1))), modifiers: .command)
+            }
+        }
+        .opacity(0)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+/// Plates as a vertical list (wide layouts).
+struct PlateSidebar: View {
+    @EnvironmentObject var model: AppModel
+
+    var body: some View {
+        ScrollView {
+            LazyVStack(spacing: 8) {
+                ForEach(model.project?.plates ?? []) { p in
+                    PlateCard(plate: p)
+                }
+            }
+            .padding(10)
+        }
+        .background(Color(.secondarySystemBackground))
     }
 }
 
@@ -98,37 +215,7 @@ struct PlateStrip: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach(model.project?.plates ?? []) { p in
-                        Button {
-                            Task { await model.selectPlate(p.index) }
-                        } label: {
-                            HStack(spacing: 8) {
-                                Group {
-                                    if let img = model.thumbnails[p.index] {
-                                        Image(uiImage: img).resizable().scaledToFit()
-                                    } else {
-                                        Image(systemName: "square.dashed").foregroundStyle(.secondary)
-                                    }
-                                }
-                                .frame(width: 40, height: 40)
-                                .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 6))
-                                VStack(alignment: .leading, spacing: 3) {
-                                    HStack(spacing: 4) {
-                                        Text("Plate \(p.id)").font(.caption.monospaced()).foregroundStyle(.secondary)
-                                        if p.offBed { Image(systemName: "exclamationmark.triangle.fill").font(.caption2).foregroundStyle(.red) }
-                                        if p.filaments.count > 4 { Image(systemName: "exclamationmark.circle").font(.caption2).foregroundStyle(.orange) }
-                                    }
-                                    Text(p.name).font(.caption).lineLimit(1).frame(maxWidth: 130, alignment: .leading)
-                                    HStack(spacing: 3) {
-                                        ForEach(p.filaments, id: \.self) { f in Circle().fill(model.color(of: f)).frame(width: 8, height: 8).overlay(Circle().stroke(.secondary.opacity(0.4), lineWidth: 0.5)) }
-                                    }
-                                }
-                            }
-                            .padding(6)
-                            .background(RoundedRectangle(cornerRadius: 10).fill(p.index == model.plateIndex ? Theme.accent.opacity(0.15) : Color(.secondarySystemBackground)))
-                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(p.index == model.plateIndex ? Theme.accent : .clear, lineWidth: 1.5))
-                        }
-                        .buttonStyle(.plain)
-                        .id(p.index)
+                        PlateCard(plate: p).id(p.index)
                     }
                 }
                 .padding(.horizontal)
@@ -137,6 +224,49 @@ struct PlateStrip: View {
             .onChange(of: model.plateIndex) { _, i in withAnimation { proxy.scrollTo(i, anchor: .center) } }
         }
     }
+}
+
+struct PlateCard: View {
+    @EnvironmentObject var model: AppModel
+    let plate: PlateInfo
+
+    var body: some View {
+        let p = plate
+        Button {
+            Task { await model.selectPlate(p.index) }
+        } label: {
+            HStack(spacing: 8) {
+                Group {
+                    if let img = model.thumbnails[p.index] {
+                        Image(uiImage: img).resizable().scaledToFit()
+                    } else {
+                        Image(systemName: "square.dashed").foregroundStyle(.secondary)
+                    }
+                }
+                .frame(width: 40, height: 40)
+                .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 6))
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 4) {
+                        Text("Plate \(p.id)").font(.caption.monospaced()).foregroundStyle(.secondary)
+                        if p.offBed { Image(systemName: "exclamationmark.triangle.fill").font(.caption2).foregroundStyle(.red) }
+                        if p.filaments.count > colourLimit { Image(systemName: "exclamationmark.circle").font(.caption2).foregroundStyle(.orange) }
+                    }
+                    Text(p.name).font(.caption).lineLimit(1).frame(maxWidth: 130, alignment: .leading)
+                    HStack(spacing: 3) {
+                        ForEach(p.filaments, id: \.self) { f in Circle().fill(model.color(of: f)).frame(width: 8, height: 8).overlay(Circle().stroke(.secondary.opacity(0.4), lineWidth: 0.5)) }
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(6)
+            .background(RoundedRectangle(cornerRadius: 10).fill(p.index == model.plateIndex ? Theme.accent.opacity(0.15) : Color(.secondarySystemBackground)))
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(p.index == model.plateIndex ? Theme.accent : .clear, lineWidth: 1.5))
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// AMS slots or toolheads available on the target printer.
+    var colourLimit: Int { model.target.isToolChanger ? model.target.tools : 4 }
 }
 
 struct OrientBar: View {
@@ -191,11 +321,25 @@ struct PlatePanel: View {
                         stat("\(p.filaments.count)", p.filaments.count == 1 ? "colour" : "colours")
                     }
                     if p.offBed {
-                        Label("Part of this plate hangs off the bed. Rotate it or reset it before slicing.", systemImage: "exclamationmark.triangle.fill")
-                            .font(.footnote).foregroundStyle(.red)
+                        VStack(alignment: .leading, spacing: 8) {
+                            ForEach(p.fitIssues ?? ["Part of this plate doesn't fit on the \(model.target.shortName)'s bed."], id: \.self) { issue in
+                                Label(issue, systemImage: "exclamationmark.triangle.fill")
+                                    .font(.footnote).foregroundStyle(.red)
+                            }
+                            Button {
+                                Task { await model.centerPlate() }
+                            } label: {
+                                Label("Center on the \(model.target.shortName)'s bed", systemImage: "arrow.up.and.down.and.arrow.left.and.right")
+                            }
+                            .buttonStyle(.bordered)
+                        }
                     }
-                    if p.filaments.count > 4 {
-                        Label("This plate uses \(p.filaments.count) filaments; the AMS lite holds 4.", systemImage: "exclamationmark.circle")
+                    if !model.target.isToolChanger && p.filaments.count > 4 {
+                        Label("This plate uses \(p.filaments.count) filaments; one AMS holds 4.", systemImage: "exclamationmark.circle")
+                            .font(.footnote).foregroundStyle(.orange)
+                    }
+                    if model.target.isToolChanger && p.filaments.count > model.target.tools {
+                        Label("This plate uses \(p.filaments.count) filaments and the \(model.target.shortName) has \(model.target.tools) heads.", systemImage: "exclamationmark.circle")
                             .font(.footnote).foregroundStyle(.orange)
                     }
                 }
@@ -211,7 +355,7 @@ struct PlatePanel: View {
                                 HStack(spacing: 3) { ForEach(o.filaments, id: \.self) { f in Circle().fill(model.color(of: f)).frame(width: 9, height: 9) } }
                                 Text(o.name).foregroundStyle(.primary).lineLimit(1)
                                 Spacer()
-                                if o.edited { Text("Rotated").font(.caption2).foregroundStyle(Theme.accent) }
+                                if o.edited { Text("Moved").font(.caption2).foregroundStyle(Theme.accent) }
                                 if o.offBed { Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.red) }
                                 if model.selectedObject == o.index { Image(systemName: "checkmark").foregroundStyle(Theme.accent) }
                             }
