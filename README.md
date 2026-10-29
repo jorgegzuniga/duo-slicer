@@ -24,7 +24,7 @@ The dual-nozzle Bambu printers (H2D, H2D Pro, H2C, X2D) aren't supported yet. Se
 
 Built with the iOS 27.1 SDK so the app fills the inner screen. The project screen follows the device:
 
-- **Unfolded, held wide**: 3D view on the left half, panels on the right half; the split sits exactly on the crease (from UIKit's reserved regions, or the middle of the inner screen if UIKit doesn't report one), so nothing you tap lands on the fold. The home screen splits the same way: projects on one side, printer and Claude on the other.
+- **Unfolded, held wide**: 3D view on the left half, panels on the right half; the split sits exactly on the crease (from UIKit's reserved regions, or the middle of the inner screen if UIKit doesn't report one), so nothing you tap lands on the fold. Each half has its own header (Close and the project name on the left, the panel tabs and ⋯ menu on the right) instead of a title over the crease. The home screen splits the same way: projects on one side, printer and Claude on the other.
 - **Unfolded, held tall or half-folded**: 3D view on the top half, panels below.
 - **Folded** (outer screen) and in Split View: one column with the panel under the 3D view.
 - iPad and other large windows get the side-by-side layout, with a plates sidebar on very wide windows. ⌘O, ⌘R (slice), ⌘P (print) and ⌘1–⌘4 work with a keyboard.
@@ -62,7 +62,7 @@ Anyone with the connector URL can use these tools while the app is open, so keep
 
 The Xcode project is generated with [XcodeGen](https://github.com/yonaskolb/XcodeGen) from `project.yml`. CI uses GitHub's `xcode-27` runner (Xcode 27.1).
 
-- `build.yml` (every push): engine self-test for all eleven printers, relay smoke test, simulator build, demo screenshots on the iPhone Duo, an iPhone and an iPad mini (pushed to the `screenshots` branch), and an end-to-end run where MCP calls go through a local relay to the app in the simulator.
+- `build.yml` (every push): engine self-test for all eleven printers, relay smoke test, simulator build, demo screenshots on the iPhone Duo's outer screen, an end-to-end run where MCP calls go through a local relay to the app in the simulator, and the unfolded inner screen (Device Hub's posture bar is clicked to open the simulated Duo, since `simctl` can't unfold it) — all pushed to the `screenshots` branch. A second job draws the unfolded layouts at the inner screen's size on a 13-inch iPad simulator, held wide and tall (`screenshots-inner` branch).
 - `testflight.yml` (pushes to `main`): archives, signs and uploads to TestFlight with the `APPLE_TEAM_ID`, `ASC_KEY_ID`, `ASC_ISSUER_ID` and `ASC_KEY_P8` secrets.
 - `relay.yml` (pushes to `main` that touch `relay/`): deploys the Claude relay with the Cloudflare secrets.
 

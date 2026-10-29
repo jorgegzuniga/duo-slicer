@@ -111,7 +111,7 @@ struct ProjectView: View {
                 canvas
             }
             .frame(width: left)
-            if gap > 0 { FoldGap(vertical: true).frame(width: gap) } else { Divider() }
+            if gap > 0 { FoldGap(vertical: true).frame(width: gap).ignoresSafeArea(edges: .bottom) } else { Divider() }
             inspector(menu: paneHeaders)
         }
     }
@@ -216,6 +216,8 @@ struct ProjectView: View {
                 }
             }
         }
+        // full-bleed under the home indicator when the 3D view is at the bottom (side-by-side layouts)
+        .ignoresSafeArea(edges: .bottom)
     }
 
     var panelPicker: some View {
