@@ -245,7 +245,7 @@ struct ClaudeSettingsView: View {
                     } header: {
                         Text("Connector URL")
                     } footer: {
-                        Text("In Claude, open Settings › Connectors, add a custom connector and paste this URL. Keep it private: it's the key to these tools.")
+                        Text("In Claude, open Customize › Connectors, choose + Add › Add custom connector, paste this URL and pick No sign in. Keep the URL private: it's the key to these tools.")
                     }
                     Section {
                         TextField("https://duo-slicer-relay.example.workers.dev", text: $claude.relayURL)
