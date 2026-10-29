@@ -47,7 +47,12 @@ jobs:
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
             -allowProvisioningUpdates \
             -authenticationKeyPath "$KEY_PATH" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
-            archive | tail -40
+            archive > archive.log 2>&1 || {
+              grep -E "error:|error |Error|failed|No profiles|signing|Signing|provision" archive.log | grep -v "^\s*$" | sort -u | head -40 | while IFS= read -r l; do echo "::error::${l:0:900}"; done
+              tail -15 archive.log | while IFS= read -r l; do echo "::warning::${l:0:900}"; done
+              exit 1
+            }
+          tail -5 archive.log
       - name: Upload to TestFlight
         if: steps.secrets.outputs.ready == 'true'
         env:
@@ -61,4 +66,9 @@ jobs:
           xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/A1Slicer.xcarchive" \
             -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" -exportPath "$RUNNER_TEMP/export" \
             -allowProvisioningUpdates \
-            -authenticationKeyPath "$KEY_PATH" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID" | tail -40
+            -authenticationKeyPath "$KEY_PATH" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID" > export.log 2>&1 || {
+              grep -E "error:|error |Error|failed|No profiles|signing|Signing|provision|ITMS" export.log | sort -u | head -40 | while IFS= read -r l; do echo "::error::${l:0:900}"; done
+              tail -15 export.log | while IFS= read -r l; do echo "::warning::${l:0:900}"; done
+              exit 1
+            }
+          tail -10 export.log
