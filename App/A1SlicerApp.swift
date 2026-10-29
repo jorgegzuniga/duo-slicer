@@ -114,42 +114,36 @@ struct HomeView: View {
     @State private var showPrinters = false
     @State private var showClaude = false
     @State private var fold: CGRect?
-    @State private var paneTitle = false
 
     var body: some View {
         NavigationStack {
             GeometryReader { geo in
                 // on the unfolded iPhone Duo: projects on one side of the crease, printer and Claude on the other
-                let layout = ProjectLayout(size: geo.size, fold: fold)
-                Group {
-                    switch layout {
-                    case .split(let left, let gap) where gap > 0:
-                        HStack(spacing: 0) {
-                            List { titleRow; projectSections }.frame(width: left)
-                            FoldGap(vertical: true, background: Color(.systemGroupedBackground)).frame(width: gap)
-                            List { deviceSections }
-                        }
-                    case .stacked(let top, let gap):
-                        VStack(spacing: 0) {
-                            List { titleRow; projectSections }.frame(height: top)
-                            FoldGap(vertical: false, background: Color(.systemGroupedBackground)).frame(height: gap)
-                            List { deviceSections }
-                        }
-                    default:
-                        List {
-                            projectSections
-                            deviceSections
-                        }
+                switch ProjectLayout(size: geo.size, fold: fold) {
+                case .split(let left, let gap) where gap > 0:
+                    HStack(spacing: 0) {
+                        List { titleRow; projectSections }.frame(width: left)
+                        FoldGap(vertical: true, background: Color(.systemGroupedBackground)).frame(width: gap)
+                        List { deviceSections }
                     }
-                }
-                .onChange(of: layout, initial: true) { _, l in
-                    if case .stacked = l { paneTitle = true } else { paneTitle = l.splitsAtCrease }
+                case .stacked(let top, let gap):
+                    VStack(spacing: 0) {
+                        List { titleRow; projectSections }.frame(height: top)
+                        FoldGap(vertical: false, background: Color(.systemGroupedBackground)).frame(height: gap)
+                        List { deviceSections }
+                    }
+                default:
+                    List {
+                        titleRow
+                        projectSections
+                        deviceSections
+                    }
                 }
             }
             .background(Color(.systemGroupedBackground))
             .background(FoldReader(fold: $fold))
-            // two lists around the crease: the title goes in the first one instead of the navigation bar
-            .toolbar(paneTitle ? .hidden : .visible, for: .navigationBar)
+            // the title is the first row of the list (a bar-wide title would sit on the iPhone Duo's crease)
+            .toolbar(.hidden, for: .navigationBar)
             .navigationTitle("Duo Slicer")
             .fileImporter(isPresented: $importing, allowedContentTypes: [.threeMF, .zip, .data]) { result in
                 if case .success(let url) = result { Task { await model.open(url: url) } }

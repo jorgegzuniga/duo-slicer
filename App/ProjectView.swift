@@ -16,12 +16,6 @@ enum ProjectLayout: Equatable {
     case stacked(top: CGFloat, gap: CGFloat)  // 3D view over panels around a horizontal crease
     case threePane
 
-    /// 3D view and panels on either side of a vertical crease: each half gets its own header, so nothing sits on the fold.
-    var splitsAtCrease: Bool {
-        if case .split(_, let gap) = self { return gap > 0 }
-        return false
-    }
-
     init(size: CGSize, fold: CGRect?) {
         if let f = fold {
             let runsDown = f.height >= size.height * 0.8 && f.width < size.width * 0.3
@@ -47,7 +41,10 @@ struct ProjectView: View {
     @State private var pickFace = false
     @State private var shareURL: URL?
     @State private var fold: CGRect?
-    @State private var paneHeaders = false
+
+    /// A crease running top to bottom (the unfolded iPhone Duo held wide): the navigation bar's centred title would sit on it,
+    /// so each half gets its own header instead. Depends only on the fold, not on the layout, so hiding the bar can't flip it.
+    private var paneHeaders: Bool { fold.map { $0.height > $0.width } ?? false }
 
     var body: some View {
         NavigationStack {
@@ -65,7 +62,6 @@ struct ProjectView: View {
                 .overlay {
                     if DemoMode.showFold { FoldDebugOverlay(fold: fold, size: geo.size) }
                 }
-                .onChange(of: layout, initial: true) { _, l in paneHeaders = l.splitsAtCrease }
             }
             .background(FoldReader(fold: $fold))
             .navigationTitle(model.fileName)
@@ -96,6 +92,7 @@ struct ProjectView: View {
     /// One column. The panel takes less room on short screens (the iPhone Duo's outer screen) so the 3D view stays usable.
     func compact(_ size: CGSize) -> some View {
         VStack(spacing: 0) {
+            if paneHeaders { fullHeader }
             PlateStrip()
             canvas
                 .frame(maxHeight: .infinity)
@@ -109,13 +106,23 @@ struct ProjectView: View {
     func split(left: CGFloat, gap: CGFloat) -> some View {
         HStack(spacing: 0) {
             VStack(spacing: 0) {
-                if gap > 0 { leftHeader }
+                if paneHeaders { leftHeader }
                 PlateStrip()
                 canvas
             }
             .frame(width: left)
             if gap > 0 { FoldGap(vertical: true).frame(width: gap) } else { Divider() }
-            inspector(menu: gap > 0)
+            inspector(menu: paneHeaders)
+        }
+    }
+
+    /// Close, the project name and the ⋯ menu across the top, when the navigation bar is hidden but the layout isn't split.
+    var fullHeader: some View {
+        HStack(spacing: 12) {
+            leftHeader
+            moreMenu
+                .font(.title2)
+                .padding(.trailing)
         }
     }
 
@@ -169,6 +176,13 @@ struct ProjectView: View {
     }
 
     var threePane: some View {
+        VStack(spacing: 0) {
+            if paneHeaders { fullHeader }
+            threePaneBody
+        }
+    }
+
+    var threePaneBody: some View {
         HStack(spacing: 0) {
             PlateSidebar()
                 .frame(width: 250)

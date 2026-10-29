@@ -64,6 +64,8 @@ shot() {  # label udid name -- launch args...
   limit 30 xcrun simctl terminate "$udid" "$BUNDLE" 2>/dev/null || true
   limit 60 xcrun simctl launch "$udid" "$BUNDLE" "$@" > /dev/null 2>> shots/simctl-errors.txt || true
   sleep "${WAIT:-14}"
+  # the app's CPU use on the host: a busy app at rest means a layout loop
+  { echo "$label-$name: $(ps -Ao pcpu=,rss=,command= | grep -i "Duo Slicer.app/Duo Slicer" | grep -v grep | awk '{print $1 "% cpu, " int($2/1024) " MB"}' | xargs)"; } >> shots/app-cpu.txt 2>&1
   if [ -n "${DISPLAYS:-}" ]; then  # devices with more than one screen (the iPhone Duo)
     for d in $DISPLAYS; do
       limit 45 xcrun simctl io "$udid" screenshot --display="$d" "shots/$label-$name-screen$d.png" >> shots/simctl-errors.txt 2>&1 && echo "shot $label-$name (screen $d)"
@@ -128,6 +130,7 @@ inner)
   shot "$label" "$udid" tall-plate -DuoDemo YES -DuoDemoPrinter bambu-x1c -DuoDemoPanel plate -DuoDemoInner tall -DuoDemoShowFold YES
   shot "$label" "$udid" tall-preview -DuoDemo YES -DuoDemoPrinter bambu-x1c -DuoDemoSlice YES -DuoDemoPanel preview -DuoDemoInner tall
   shot "$label" "$udid" tall-home -DuoDemo YES -DuoDemoHome YES -DuoDemoPrinter snapmaker-u1 -DuoDemoInner tall
+  shot "$label" "$udid" regular-plate -DuoDemo YES -DuoDemoPrinter bambu-x1c -DuoDemoPanel plate
   ;;
 unfold)
   # The simulator boots the iPhone Duo folded (outer screen on, inner screen dark) and simctl can't unfold it,
