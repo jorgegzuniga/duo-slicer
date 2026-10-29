@@ -1,0 +1,42 @@
+name: TestFlight status
+
+# Manual check: lists recent builds of the app and their processing state.
+on:
+  workflow_dispatch:
+
+jobs:
+  status:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Query App Store Connect
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          pip install --quiet pyjwt cryptography
+          python3 - <<'PY'
+          import jwt, time, os, json, re, base64, textwrap, urllib.request
+          raw = os.environ["ASC_KEY_P8"]
+          body = re.sub(r"[^A-Za-z0-9+/=]", "", re.sub(r"-----(BEGIN|END)[^-]*-----", "", raw))
+          key = "-----BEGIN PRIVATE KEY-----\n" + "\n".join(textwrap.wrap(body, 64)) + "\n-----END PRIVATE KEY-----\n"
+          tok = jwt.encode({"iss": os.environ["ASC_ISSUER_ID"], "exp": int(time.time()) + 600, "aud": "appstoreconnect-v1"},
+                           key, algorithm="ES256", headers={"kid": os.environ["ASC_KEY_ID"]})
+          def get(url):
+              return json.load(urllib.request.urlopen(urllib.request.Request("https://api.appstoreconnect.apple.com" + url, headers={"Authorization": "Bearer " + tok})))
+          apps = get("/v1/apps?filter[bundleId]=Com.jorgegzuniga.duoslicer")["data"]
+          if not apps:
+              print("::error::App not found"); raise SystemExit(1)
+          aid = apps[0]["id"]
+          builds = get(f"/v1/builds?filter[app]={aid}&sort=-uploadedDate&limit=10&include=buildBetaDetail")
+          details = {d["id"]: d["attributes"] for d in builds.get("included", []) if d["type"] == "buildBetaDetails"}
+          if not builds["data"]:
+              print("::warning::No builds yet. Apple may still be ingesting the upload.")
+          for b in builds["data"]:
+              a = b["attributes"]
+              bd = b.get("relationships", {}).get("buildBetaDetail", {}).get("data") or {}
+              d = details.get(bd.get("id"), {})
+              print("::notice::Build %s uploaded %s: processing=%s, expired=%s, encryption=%s, internal=%s, external=%s" % (
+                  a.get("version"), a.get("uploadedDate"), a.get("processingState"), a.get("expired"),
+                  a.get("usesNonExemptEncryption"), d.get("internalBuildState"), d.get("externalBuildState")))
+          PY
