@@ -21,7 +21,7 @@ function findProcess(se, bid) {
     if (ps.length) return ps[0];
   } catch (e) {}
   for (const p of se.processes()) {
-    if (/device hub|simulator/i.test(safe(() => p.name()))) return p;
+    if (/device ?hub|simulator/i.test(safe(() => p.name()))) return p;
   }
   return null;
 }

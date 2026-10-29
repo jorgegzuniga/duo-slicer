@@ -148,13 +148,35 @@ unfold)
     [ "$size" -gt 130000 ]
   }
   unfolded=""
-  hub=$(find "$XA/Contents" -maxdepth 5 -name "Device Hub.app" -prune 2>/dev/null | head -1)
+  # Xcode 27's Simulator is DeviceHub.app (Xcode > Open Developer Tool > Device Hub)
+  hub=$(find "$XA/Contents" -maxdepth 5 \( -name "DeviceHub.app" -o -name "Device Hub.app" \) -prune 2>/dev/null | head -1)
   [ -z "$hub" ] && hub=$(find "$XA/Contents" -maxdepth 5 -name "Simulator.app" -prune 2>/dev/null | head -1)
   note "device app: ${hub:-none}"
+  {
+    echo "== guest frameworks named like posture, hinge or fold"
+    rt=$(xcrun simctl list runtimes -j | python3 -c 'import json,sys; [print(r["bundlePath"]) for r in json.load(sys.stdin)["runtimes"] if r.get("version","").startswith("27.1")]' | head -1)
+    root="$rt/Contents/Resources/RuntimeRoot"
+    echo "runtime root: $root"
+    find "$root/System/Library/PrivateFrameworks" "$root/System/Library/Frameworks" -maxdepth 1 \( -iname "*posture*" -o -iname "*hinge*" -o -iname "*fold*" \) 2>/dev/null | head -20
+    find "$root" -maxdepth 6 -iname "*SimulatorBridge*" 2>/dev/null | head -5 | while IFS= read -r f; do
+      echo "-- $f"
+      b=$f; [ -d "$f" ] && b="$f/$(defaults read "$f/Info" CFBundleExecutable 2>/dev/null)"
+      strings -a "$b" 2>/dev/null | grep -iE "posture|hinge|fold" | sort -u | head -40
+    done
+  } >> "$P" 2>&1
   if [ -n "$hub" ]; then
     bid=$(defaults read "$hub/Contents/Info" CFBundleIdentifier 2>/dev/null)
-    exe=$(defaults read "$hub/Contents/Info" CFBundleExecutable 2>/dev/null)
-    { echo "== $bid strings"; strings -a "$hub/Contents/MacOS/$exe" 2>/dev/null | grep -iE "posture|hinge|unfold|folded" | sort -u | head -80; } >> "$P" 2>&1
+    {
+      echo "== $hub ($bid)"
+      find "$hub/Contents" -maxdepth 3 -not -path "*.lproj*" | head -60
+      echo "== posture strings and symbols in Device Hub"
+      find "$hub/Contents" -type f 2>/dev/null | while IFS= read -r f; do
+        file -b "$f" 2>/dev/null | grep -q Mach-O || continue
+        hits=$(strings -a "$f" 2>/dev/null | grep -iE "posture|hinge|unfold|folded|foldstate|crease|lidangle|lid angle" | sort -u | head -60)
+        syms=$(nm -gU "$f" 2>/dev/null | grep -iE "posture|hinge|fold" | awk '{print $NF}' | xcrun swift-demangle --simplified 2>/dev/null | sort -u | head -40)
+        [ -n "$hits$syms" ] && { echo "-- $f"; echo "$hits"; echo "$syms"; }
+      done
+    } >> "$P" 2>&1
     open -a "$hub" >> "$P" 2>&1
     sleep 30
     screencapture -x shots/mac-1.png >> "$P" 2>&1
