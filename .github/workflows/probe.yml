@@ -8,10 +8,11 @@ on:
 
 jobs:
   probe:
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-26, macos-15, macos-latest]
+        os: [macos-27, macos-26-xlarge]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Xcodes and simulators
