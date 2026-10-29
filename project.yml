@@ -58,7 +58,7 @@ targets:
               public.mime-type: [model/3mf, application/vnd.ms-package.3dmanufacturing-3dmodel+xml]
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.jorgegzuniga.duoslicer
+        PRODUCT_BUNDLE_IDENTIFIER: Com.jorgegzuniga.duoslicer
         PRODUCT_NAME: Duo Slicer
         SWIFT_OBJC_BRIDGING_HEADER: App/A1Slicer-Bridging-Header.h
         HEADER_SEARCH_PATHS:
