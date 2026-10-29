@@ -7,6 +7,21 @@ APP="build/dd/Build/Products/Debug-iphonesimulator/Duo Slicer.app"
 BUNDLE=Com.jorgegzuniga.duoslicer
 mkdir -p shots
 
+# run a command with a time limit (seconds); simulator commands can hang on a device that's still booting
+limit() {
+  local secs=$1
+  shift
+  "$@" &
+  local pid=$!
+  ( sleep "$secs"; kill -9 "$pid" 2>/dev/null; echo "timed out after ${secs}s: $*" >> shots/simctl-errors.txt ) &
+  local watcher=$!
+  wait "$pid"
+  local rc=$?
+  kill "$watcher" 2>/dev/null
+  wait "$watcher" 2>/dev/null
+  return $rc
+}
+
 pick() {  # newest available simulator whose name matches a regex
   xcrun simctl list devices available -j | python3 -c '
 import json, sys, re
@@ -21,23 +36,23 @@ print(best[1] if best else "")' "$1"
 
 boot() {
   local udid=$1
-  xcrun simctl boot "$udid" 2>/dev/null || true
-  xcrun simctl bootstatus "$udid" -b > /dev/null 2>&1 || true
-  xcrun simctl status_bar "$udid" override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3 2>/dev/null || true
-  xcrun simctl install "$udid" "$APP"
+  limit 60 xcrun simctl boot "$udid" 2>/dev/null || true
+  limit 420 xcrun simctl bootstatus "$udid" -b > /dev/null 2>&1 || true
+  limit 30 xcrun simctl status_bar "$udid" override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3 2>/dev/null || true
+  limit 120 xcrun simctl install "$udid" "$APP"
 }
 
 shot() {  # label udid name -- launch args...
   local label=$1 udid=$2 name=$3
   shift 3
-  xcrun simctl terminate "$udid" "$BUNDLE" 2>/dev/null || true
-  xcrun simctl launch "$udid" "$BUNDLE" "$@" > /dev/null 2>> shots/simctl-errors.txt || true
+  limit 30 xcrun simctl terminate "$udid" "$BUNDLE" 2>/dev/null || true
+  limit 60 xcrun simctl launch "$udid" "$BUNDLE" "$@" > /dev/null 2>> shots/simctl-errors.txt || true
   sleep "${WAIT:-14}"
-  if xcrun simctl io "$udid" screenshot "shots/$label-$name.png" >> shots/simctl-errors.txt 2>&1; then
+  if limit 45 xcrun simctl io "$udid" screenshot "shots/$label-$name.png" >> shots/simctl-errors.txt 2>&1; then
     echo "shot $label-$name"
   else
     for d in internal external; do
-      xcrun simctl io "$udid" screenshot --display=$d "shots/$label-$name-$d.png" >> shots/simctl-errors.txt 2>&1 && echo "shot $label-$name ($d)"
+      limit 45 xcrun simctl io "$udid" screenshot --display=$d "shots/$label-$name-$d.png" >> shots/simctl-errors.txt 2>&1 && echo "shot $label-$name ($d)"
     done
   fi
   return 0
@@ -45,7 +60,7 @@ shot() {  # label udid name -- launch args...
 
 case "${1:-screenshots}" in
 screenshots)
-  { xcrun simctl help; xcrun simctl io help; } > shots/simctl-help.txt 2>&1 || true
+  { limit 30 xcrun simctl help; limit 30 xcrun simctl io help; xcrun simctl list devices available; } > shots/simctl-help.txt 2>&1 || true
   for spec in "duo:^iPhone Duo$" "iphone:^iPhone 1[0-9] Pro$" "ipad-mini:^iPad mini"; do
     label=${spec%%:*}
     udid=$(pick "${spec#*:}")
@@ -56,7 +71,7 @@ screenshots)
     shot "$label" "$udid" preview -DuoDemo YES -DuoDemoPrinter bambu-x1c -DuoDemoSlice YES -DuoDemoPanel preview
     shot "$label" "$udid" u1-print -DuoDemo YES -DuoDemoPrinter snapmaker-u1 -DuoDemoSlice YES -DuoDemoPanel print
     shot "$label" "$udid" settings -DuoDemo YES -DuoDemoPrinter snapmaker-u1 -DuoDemoPanel settings
-    xcrun simctl shutdown "$udid" 2>/dev/null || true
+    limit 60 xcrun simctl shutdown "$udid" 2>/dev/null || true
   done
   ;;
 claude)
@@ -66,12 +81,12 @@ claude)
   udid=$(pick "^iPhone Duo$")
   [ -z "$udid" ] && udid=$(pick "^iPhone 1[0-9] Pro$")
   boot "$udid"
-  xcrun simctl terminate "$udid" "$BUNDLE" 2>/dev/null || true
-  xcrun simctl launch "$udid" "$BUNDLE" -DuoDemo YES -DuoDemoPrinter snapmaker-u1 -DuoDemoPanel preview \
+  limit 30 xcrun simctl terminate "$udid" "$BUNDLE" 2>/dev/null || true
+  limit 60 xcrun simctl launch "$udid" "$BUNDLE" -DuoDemo YES -DuoDemoPrinter snapmaker-u1 -DuoDemoPanel preview \
     -DuoClaudeRelay http://127.0.0.1:8787 -DuoClaudeSecret "$secret" > /dev/null
-  node relay/test/app-e2e.mjs http://127.0.0.1:8787 "$secret" shots
+  limit 600 node relay/test/app-e2e.mjs http://127.0.0.1:8787 "$secret" shots
   rc=$?
-  xcrun simctl io "$udid" screenshot shots/claude-after.png > /dev/null 2>&1 || true
+  limit 45 xcrun simctl io "$udid" screenshot shots/claude-after.png > /dev/null 2>&1 || true
   exit $rc
   ;;
 esac

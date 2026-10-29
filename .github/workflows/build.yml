@@ -62,10 +62,12 @@ jobs:
           fi
       - name: Screenshots
         continue-on-error: true
+        timeout-minutes: 25
         run: ci/simulator.sh screenshots
       - name: Claude end to end (local relay + the app in the simulator)
         id: e2e
         continue-on-error: true
+        timeout-minutes: 20
         run: ci/simulator.sh claude
       - name: Publish the build errors to the ci-logs branch
         if: failure() && github.event_name == 'push'
