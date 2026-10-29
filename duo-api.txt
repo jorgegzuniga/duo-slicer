@@ -1,0 +1,286 @@
+SDK /Applications/Xcode_27.1.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS27.1.sdk
+===== SwiftUI: /Applications/Xcode_27.1.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS27.1.sdk/System/Library/Frameworks/SwiftUI.framework/Modules/SwiftUI.swiftmodule/arm64e-apple-ios.swiftinterface
+32203-}
+32204-@available(anyAppleOS 27.1, *)
+32205-extension SwiftUICore.View {
+32206:  nonisolated public func toolbarVerticalBehavior(_ behavior: SwiftUI.ToolbarVerticalBehavior) -> some SwiftUICore.View
+32207-  
+32208-}
+32209-@available(anyAppleOS 27.1, *)
+32210-public struct ToolbarVerticalBehavior : Swift.Hashable, Swift.Sendable {
+32211-  public static let automatic: SwiftUI.ToolbarVerticalBehavior
+32212-  public static let disabled: SwiftUI.ToolbarVerticalBehavior
+32213-  public static func == (a: SwiftUI.ToolbarVerticalBehavior, b: SwiftUI.ToolbarVerticalBehavior) -> Swift.Bool
+32214-  public func hash(into hasher: inout Swift.Hasher)
+32215-  public var hashValue: Swift.Int {
+32216-    get
+32217-  }
+32218-}
+32219-#if compiler(>=5.3) && $TildeSendable
+32220-@available(iOS 13.0, macOS 10.15, tvOS 13.0, watchOS 6.0, *)
+32221-public struct _ScrollViewProxy : Swift.Equatable, ~Swift.Sendable {
+32222-  public var config: SwiftUI._ScrollViewConfig {
+32223-    get
+32224-  }
+32225-  public var contentOffset: CoreFoundation.CGPoint {
+32226-    get
+32227-    set
+32228-  }
+32229-  public var minContentOffset: CoreFoundation.CGPoint {
+32230-    get
+32231-  }
+===== UIKit: /Applications/Xcode_27.1.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS27.1.sdk/System/Library/Frameworks/UIKit.framework/Modules/UIKit.swiftmodule/arm64e-apple-ios.swiftinterface
+1973-extension UIView {
+1974-  @available(iOS 27.1, tvOS 27.1, visionOS 27.1, *)
+1975-  @available(watchOS, unavailable)
+1976:  public struct ReservedRegion : Swift.Equatable, Swift.Hashable, Swift.Identifiable {
+1977:    public let id: UIView.ReservedRegion.ID
+1978:    public let kind: UIView.ReservedRegion.Kind
+1979-    public let frame: CoreFoundation.CGRect
+1980-    public let margins: UIEdgeInsets
+1981-    public let isActive: Swift.Bool
+1982-    public func hash(into hasher: inout Swift.Hasher)
+1983:    public static func == (a: UIView.ReservedRegion, b: UIView.ReservedRegion) -> Swift.Bool
+1984-    public var hashValue: Swift.Int {
+1985-      get
+1986-    }
+1987-  }
+1988-  @available(iOS 27.1, tvOS 27.1, visionOS 27.1, *)
+1989-  @available(watchOS, unavailable)
+1990:  @_Concurrency.MainActor @preconcurrency public func reservedRegions(kind: UIView.ReservedRegion.Kind, options: UIView.ReservedRegion.QueryOptions = []) -> [UIView.ReservedRegion]
+1991-}
+1992-@available(iOS 27.1, tvOS 27.1, visionOS 27.1, *)
+1993-@available(watchOS, unavailable)
+1994:extension UIView.ReservedRegion {
+1995-  @available(iOS 27.1, tvOS 27.1, visionOS 27.1, *)
+1996-  @available(watchOS, unavailable)
+1997-  public struct ID : Swift.Equatable, Swift.Hashable {
+1998:    public static func == (a: UIView.ReservedRegion.ID, b: UIView.ReservedRegion.ID) -> Swift.Bool
+1999-    public func hash(into hasher: inout Swift.Hasher)
+2000-    public var hashValue: Swift.Int {
+2001-      get
+2002-    }
+2003-  }
+2004-  @available(iOS 27.1, tvOS 27.1, visionOS 27.1, *)
+2005-  @available(watchOS, unavailable)
+2006-  public struct Kind : Swift.Equatable, Swift.Hashable {
+2007:    public static let occlusion: UIView.ReservedRegion.Kind
+2008:    public static let division: UIView.ReservedRegion.Kind
+2009:    public static func == (a: UIView.ReservedRegion.Kind, b: UIView.ReservedRegion.Kind) -> Swift.Bool
+2010-    public func hash(into hasher: inout Swift.Hasher)
+2011-    public var hashValue: Swift.Int {
+2012-      get
+2013-    }
+2014-  }
+2015-  @available(iOS 27.1, tvOS 27.1, visionOS 27.1, *)
+2016-  @available(watchOS, unavailable)
+2017-  public struct QueryOptions : Swift.OptionSet {
+2018:    public static let includeInactive: UIView.ReservedRegion.QueryOptions
+2019-    public init(rawValue: Swift.UInt)
+2020-    public let rawValue: Swift.UInt
+2021-    @available(iOS 27.1, tvOS 27.1, visionOS 27.1, *)
+2022-    @available(watchOS, unavailable)
+2023:    public typealias ArrayLiteralElement = UIView.ReservedRegion.QueryOptions
+2024-    @available(iOS 27.1, tvOS 27.1, visionOS 27.1, *)
+2025-    @available(watchOS, unavailable)
+2026:    public typealias Element = UIView.ReservedRegion.QueryOptions
+2027-    @available(iOS 27.1, tvOS 27.1, visionOS 27.1, *)
+2028-    @available(watchOS, unavailable)
+2029-    public typealias RawValue = Swift.UInt
+2030-  }
+2031-}
+2032-@available(iOS 27.1, tvOS 27.1, visionOS 27.1, *)
+2033-@available(watchOS, unavailable)
+2034:extension UIView.ReservedRegion.ID : Swift.CustomStringConvertible, Swift.CustomDebugStringConvertible, Swift.CustomReflectable {
+2035-  public var description: Swift.String {
+2036-    get
+2037-  }
+2038-  public var debugDescription: Swift.String {
+2039-    get
+2040-  }
+2041-  public var customMirror: Swift.Mirror {
+2042-    get
+2043-  }
+2044-}
+2045-@available(iOS 27.1, tvOS 27.1, visionOS 27.1, *)
+2046-@available(watchOS, unavailable)
+2047:extension UIView.ReservedRegion.Kind : Swift.CustomStringConvertible, Swift.CustomDebugStringConvertible, Swift.CustomReflectable {
+2048-  public var description: Swift.String {
+2049-    get
+2050-  }
+2051-  public var debugDescription: Swift.String {
+2052-    get
+2053-  }
+2054-  public var customMirror: Swift.Mirror {
+2055-    get
+2056-  }
+2057-}
+2058-extension UIBarButtonItem {
+2059-  @available(iOS 14.0, tvOS 14.0, *)
+2060-  @_Concurrency.MainActor @preconcurrency convenience public init(systemItem: UIBarButtonItem.SystemItem, primaryAction: UIAction? = nil, menu: UIMenu? = nil)
+2061-  @available(iOS 14.0, tvOS 14.0, *)
+2062-  @_Concurrency.MainActor @preconcurrency convenience public init(title: Swift.String? = nil, image: UIImage? = nil, primaryAction: UIAction? = nil, menu: UIMenu? = nil)
+2063-  @available(iOS 16.0, tvOS 16.0, *)
+2064-  @_Concurrency.MainActor @preconcurrency convenience public init(title: Swift.String?, image: UIImage?, target: Swift.AnyObject?, action: ObjectiveC.Selector?, menu: UIMenu? = nil)
+2065-}
+2066-extension UIBarButtonItem {
+2067-  @available(iOS 16.0, *)
+2068-  @available(tvOS, unavailable)
+2069-  @available(watchOS, unavailable)
+2070-  @_Concurrency.MainActor @preconcurrency public func creatingOptionalGroup(customizationIdentifier: Swift.String, isInDefaultCustomization: Swift.Bool = true) -> UIBarButtonItemGroup
+2071-}
+2072-@available(iOS 17.0, tvOS 17.0, *)
+--
+4096-  @available(tvOS, unavailable)
+4097-  @available(visionOS, unavailable)
+4098-  @available(watchOS, unavailable)
+4099:  @available(iOS, deprecated: 27.0, message: "Use reservedRegions(kind:) with .division instead")
+4100:  @available(tvOS, deprecated: 27.0, message: "Use reservedRegions(kind:) with .division instead")
+4101:  @available(visionOS, deprecated: 27.0, message: "Use reservedRegions(kind:) with .division instead")
+4102:  @available(watchOS, deprecated: 27.0, message: "Use reservedRegions(kind:) with .division instead")
+4103-  @_Concurrency.MainActor @preconcurrency public var _boundaryLayoutRegions: [UIView.LayoutRegion] {
+4104-    get
+4105-  }
+4106-}
+4107-@available(iOS 27.0, tvOS 27.0, visionOS 27.0, *)
+4108-@available(watchOS, unavailable)
+4109-extension UIWindowScene {
+4110-  @_Concurrency.MainActor @preconcurrency public func displayLink(action: @escaping @Sendable (QuartzCore.CADisplayLink) -> Swift.Void) -> QuartzCore.CADisplayLink?
+4111-}
+4112-@available(iOS 14.0, tvOS 14.0, *)
+4113-@available(watchOS, unavailable)
+4114-public struct UICollectionLayoutListConfiguration {
+4115-  public enum Appearance {
+4116-    case plain
+4117-    case grouped
+4118-    @available(tvOS, unavailable)
+4119-    case insetGrouped
+4120-    @available(tvOS, unavailable)
+4121-    case sidebar
+4122-    @available(tvOS, unavailable)
+4123-    case sidebarPlain
+4124-    public static func == (a: UIKit.UICollectionLayoutListConfiguration.Appearance, b: UIKit.UICollectionLayoutListConfiguration.Appearance) -> Swift.Bool
+4125-    public func hash(into hasher: inout Swift.Hasher)
+4126-    public var hashValue: Swift.Int {
+4127-      get
+===== /Applications/Xcode_27.1.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS27.1.sdk/System/Library/Frameworks/UIKit.framework/Headers/UIView.h
+19-#import <UIKit/UIFocus.h>
+20-#import <UIKit/UIViewLayoutRegion.h>
+21:#import <UIKit/UIViewReservedRegion.h>
+22-#import <UIKit/UIFocusEffect.h>
+23-#import <UIKit/UICornerConfiguration.h>
+24-#import <UIUtilities/UICoordinateSpace.h>
+25-#import <CoreLocation/CLBody.h>
+26-#if __has_include(<CoreMotion/CMBody.h>)
+27-#import <CoreMotion/CMBody.h>
+28-#endif
+29-
+30-NS_HEADER_AUDIT_BEGIN(nullability, sendability)
+31-
+32-typedef NS_ENUM(NSInteger, UIViewAnimationCurve) {
+33-    UIViewAnimationCurveEaseInOut,         // slow at beginning and end
+--
+755-@end
+756-
+757:@interface UIView (ReservedRegion)
+758-
+759-/// Returns the reserved regions of a given kind.
+760:- (nonnull NSArray<UIViewReservedRegion *> *)reservedRegionsOfKind:(nonnull UIViewReservedRegionKind *)kind API_AVAILABLE(ios(27.1), tvos(27.1), visionos(27.1)) API_UNAVAILABLE(watchos) NS_REFINED_FOR_SWIFT;
+761-
+762-/// Returns the reserved regions of a given kind and options.
+763:- (nonnull NSArray<UIViewReservedRegion *> *)reservedRegionsOfKind:(nonnull UIViewReservedRegionKind *)kind options:(UIViewReservedRegionQueryOptions)options API_AVAILABLE(ios(27.1), tvos(27.1), visionos(27.1)) API_UNAVAILABLE(watchos) NS_REFINED_FOR_SWIFT;
+764-
+765-@end
+766-
+767-API_AVAILABLE(ios(26.0), tvos(26.0), visionos(26.0)) API_UNAVAILABLE(watchos)
+768-@interface UIView (CornerConfiguration)
+769-
+770-/// A configuration that defines the corners of the view.
+771-@property (nonatomic, copy, nonnull) UICornerConfiguration *cornerConfiguration NS_REFINED_FOR_SWIFT;
+772-
+773-/// Returns the effective radius for the given `corner`, calculated using the view's current `cornerConfiguration`.
+774-///
+775-/// When invoked within ``UIView.layoutSubviews()``, ``UIView.updateProperties()``, or ``UIViewController.updateProperties()`` automatic invalidation will occur if the effective radius changes.
+===== /Applications/Xcode_27.1.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS27.1.sdk/System/Library/Frameworks/UIKit.framework/Headers/UIViewReservedRegion.h
+1:#if (defined(USE_UIKIT_PUBLIC_HEADERS) && USE_UIKIT_PUBLIC_HEADERS) || !__has_include(<UIKitCore/UIViewReservedRegion.h>)
+2-//
+3://  UIViewReservedRegion.h
+4-//  UIKit
+5-//
+6-//  Copyright © 2026 Apple Inc. All rights reserved.
+7-//
+8-
+9-#import <Foundation/Foundation.h>
+10-#import <UIKit/UIGeometry.h>
+11-
+12-NS_HEADER_AUDIT_BEGIN(nullability, sendability)
+13-
+14:@class UIViewReservedRegionIdentifier;
+15:@class UIViewReservedRegionKind;
+16-
+17-/// A region within a view's coordinate space that has been reserved by another entity.
+18-UIKIT_EXTERN UIKIT_FINAL API_AVAILABLE(ios(27.1), tvos(27.1), visionos(27.1)) API_UNAVAILABLE(watchos)
+19-NS_REFINED_FOR_SWIFT
+20:@interface UIViewReservedRegion : NSObject <NSCopying>
+21-
+22-+ (instancetype)new NS_UNAVAILABLE;
+23-- (instancetype)init NS_UNAVAILABLE;
+24-
+25-/// The identifier of the region.
+26:@property (nonatomic, readonly) UIViewReservedRegionIdentifier *identifier;
+27-
+28-/// The kind of the region.
+29:@property (nonatomic, readonly) UIViewReservedRegionKind *kind;
+30-
+31-/// The rect of the region in the view's coordinate space, including the margins.
+32-@property (nonatomic, readonly) CGRect frame;
+33-
+34-/// The margins included in the frame around the reserved rect for interactive content.
+35-@property (nonatomic, readonly) UIEdgeInsets margins;
+36-
+37-/// Whether the region is currently active.
+38-@property (nonatomic, readonly, getter=isActive) BOOL active;
+39-
+40-@end
+41-
+--
+43-UIKIT_EXTERN UIKIT_FINAL API_AVAILABLE(ios(27.1), tvos(27.1), visionos(27.1)) API_UNAVAILABLE(watchos)
+44-NS_REFINED_FOR_SWIFT
+45:@interface UIViewReservedRegionIdentifier : NSObject <NSCopying>
+46-
+47-+ (instancetype)new NS_UNAVAILABLE;
+48-- (instancetype)init NS_UNAVAILABLE;
+49-
+50-@end
+51-
+52-/// A kind of reserved region.
+53-UIKIT_EXTERN UIKIT_FINAL API_AVAILABLE(ios(27.1), tvos(27.1), visionos(27.1)) API_UNAVAILABLE(watchos)
+54-NS_REFINED_FOR_SWIFT
+55:@interface UIViewReservedRegionKind : NSObject <NSCopying>
+56-
+57-/// A region that is occluded by an element.
+58-+ (instancetype)occlusionRegionKind;
+59-
+60-/// A region where an element should divide into two separate regions.
+61-+ (instancetype)divisionRegionKind;
+62-
+63-+ (instancetype)new NS_UNAVAILABLE;
+64-- (instancetype)init NS_UNAVAILABLE;
+65-
+66-@end
+67-
+68-/// Options for querying reserved regions.
+69:typedef NS_OPTIONS(NSUInteger, UIViewReservedRegionQueryOptions) {
+70-    /// No reserved region query options.
+71:    UIViewReservedRegionQueryOptionsNone = 0,
+72-    /// Include inactive reserved regions.
+73:    UIViewReservedRegionQueryOptionsIncludeInactive = 1 << 0
+74-
+75-} API_AVAILABLE(ios(27.1), tvos(27.1), visionos(27.1)) API_UNAVAILABLE(watchos) NS_REFINED_FOR_SWIFT;
+76-
+77-NS_HEADER_AUDIT_END(nullability, sendability)
+78-
+79-#else
+80:#import <UIKitCore/UIViewReservedRegion.h>
+81-#endif
+iPhone Duo (com.apple.CoreSimulator.SimDeviceType.iPhone-Duo)
