@@ -62,54 +62,11 @@ jobs:
           fi
       - name: Screenshots
         continue-on-error: true
-        run: |
-          APP="build/dd/Build/Products/Debug-iphonesimulator/Duo Slicer.app"
-          BUNDLE=Com.jorgegzuniga.duoslicer
-          mkdir -p shots
-          pick() {  # newest available device whose name matches a pattern
-            xcrun simctl list devices available -j | python3 -c '
-          import json, sys, re
-          pat = re.compile(sys.argv[1])
-          best = None
-          for rt, devs in json.load(sys.stdin)["devices"].items():
-              if "iOS" not in rt: continue
-              for d in devs:
-                  if pat.search(d["name"]): best = (rt, d["udid"], d["name"]) if best is None or rt > best[0] else best
-          print(best[1] if best else "")' "$1"
-          }
-          shoot() {  # device-label udid name args...
-            label=$1; udid=$2; name=$3; shift 3
-            xcrun simctl terminate "$udid" "$BUNDLE" 2>/dev/null || true
-            xcrun simctl launch "$udid" "$BUNDLE" "$@" > /dev/null
-            sleep 14
-            if xcrun simctl io "$udid" screenshot "shots/$label-$name.png" >> shots/simctl-errors.txt 2>&1; then
-              echo "shot $label-$name"
-            else
-              for d in internal external; do
-                xcrun simctl io "$udid" screenshot --display=$d "shots/$label-$name-$d.png" >> shots/simctl-errors.txt 2>&1 && echo "shot $label-$name ($d)"
-              done
-            fi
-            return 0
-          }
-          xcrun simctl help > shots/simctl-help.txt 2>&1 || true
-          xcrun simctl io help >> shots/simctl-help.txt 2>&1 || true
-          xcrun simctl help ui >> shots/simctl-help.txt 2>&1 || true
-          for spec in "duo:^iPhone Duo$" "iphone:^iPhone 1[0-9] Pro$" "ipad-mini:^iPad mini"; do
-            label=${spec%%:*}; pat=${spec#*:}
-            udid=$(pick "$pat")
-            if [ -z "$udid" ]; then echo "::warning::No simulator matching $pat"; continue; fi
-            xcrun simctl boot "$udid" || true
-            xcrun simctl bootstatus "$udid" -b > /dev/null
-            xcrun simctl status_bar "$udid" override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3 2>/dev/null || true
-            xcrun simctl install "$udid" "$APP"
-            shoot "$label" "$udid" home -DuoDemo YES -DuoDemoHome YES -DuoDemoPrinter bambu-x1c
-            shoot "$label" "$udid" plate -DuoDemo YES -DuoDemoPrinter bambu-x1c -DuoDemoPanel plate
-            shoot "$label" "$udid" preview -DuoDemo YES -DuoDemoPrinter bambu-x1c -DuoDemoSlice YES -DuoDemoPanel preview
-            shoot "$label" "$udid" u1-print -DuoDemo YES -DuoDemoPrinter snapmaker-u1 -DuoDemoSlice YES -DuoDemoPanel print
-            shoot "$label" "$udid" settings -DuoDemo YES -DuoDemoPrinter snapmaker-u1 -DuoDemoPanel settings
-            xcrun simctl shutdown "$udid" || true
-          done
-          ls -la shots
+        run: ci/simulator.sh screenshots
+      - name: Claude end to end (local relay + the app in the simulator)
+        id: e2e
+        continue-on-error: true
+        run: ci/simulator.sh claude
       - name: Publish the build errors to the ci-logs branch
         if: failure() && github.event_name == 'push'
         run: |

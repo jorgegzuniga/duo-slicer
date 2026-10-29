@@ -7,13 +7,18 @@ import Foundation
 ///   -DuoDemoPanel <name>         plate, settings, preview or print
 ///   -DuoDemoSlice YES            slice before showing
 ///   -DuoDemoHome YES             stay on the home screen
+///   -DuoClaudeRelay <url>        connect "Use with Claude" to this relay (with -DuoClaudeSecret <key>)
 enum DemoMode {
     static var isOn: Bool { UserDefaults.standard.bool(forKey: "DuoDemo") }
     static var panel: Panel? { UserDefaults.standard.string(forKey: "DuoDemoPanel").flatMap { Panel(rawValue: $0.capitalized) } }
 
     @MainActor
-    static func run(model: AppModel, printer: PrinterLink) async {
+    static func run(model: AppModel, printer: PrinterLink, claude: ClaudeBridge) async {
         let d = UserDefaults.standard
+        if let relay = d.string(forKey: "DuoClaudeRelay"), !relay.isEmpty {
+            claude.relayURL = relay
+            claude.enabled = true
+        }
         if let id = d.string(forKey: "DuoDemoPrinter") {
             // a saved printer so the printer screens have something to show (it won't connect in the simulator)
             if let existing = printer.printers.first(where: { $0.modelID == id }) {

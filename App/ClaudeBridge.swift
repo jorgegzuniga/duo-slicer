@@ -48,6 +48,7 @@ final class ClaudeBridge: ObservableObject {
 
     /// Secret in the connector URL; anyone with the URL can use the app's tools, so it stays in the Keychain.
     var secret: String {
+        if let s = UserDefaults.standard.string(forKey: "DuoClaudeSecret"), s.count >= 32 { return s }  // simulator tests
         if let s = Keychain.get("claude.secret"), s.count >= 32 { return s }
         let s = Self.newSecret()
         Keychain.set(s, for: "claude.secret")

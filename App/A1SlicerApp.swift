@@ -19,7 +19,7 @@ struct A1SlicerApp: App {
                 .onAppear {
                     claude.attach(model: model, printer: printer)
                     if DemoMode.isOn {
-                        Task { await DemoMode.run(model: model, printer: printer) }
+                        Task { await DemoMode.run(model: model, printer: printer, claude: claude) }
                     } else {
                         printer.start()
                     }
