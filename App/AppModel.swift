@@ -318,9 +318,11 @@ final class AppModel: ObservableObject {
         for f in plate?.filaments ?? [] where f - 1 < options.toolMap.count && options.toolMap[f - 1] < 0 {
             options.toolMap[f - 1] = self.tool(for: f) ?? -1
         }
-        // one filament per head: the filament that had this head takes the other one's old head
+        // one filament per head (the filament that had this head takes the other one's old head),
+        // unless the plate has more colours than heads: then colours may share a head
+        let sharing = (plate?.filaments.count ?? 0) > target.tools
         let old = self.tool(for: filament)
-        for f in plate?.filaments ?? [] where f != filament && self.tool(for: f) == head {
+        for f in plate?.filaments ?? [] where !sharing && f != filament && self.tool(for: f) == head {
             if f - 1 < options.toolMap.count { options.toolMap[f - 1] = old ?? -1 }
         }
         if filament - 1 < options.toolMap.count { options.toolMap[filament - 1] = head }

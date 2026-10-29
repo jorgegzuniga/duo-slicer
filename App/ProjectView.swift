@@ -48,7 +48,7 @@ struct ProjectView: View {
                 let layout = ProjectLayout(size: geo.size, fold: fold)
                 Group {
                     switch layout {
-                    case .compact: compact
+                    case .compact: compact(geo.size)
                     case .split(let left, let gap): split(left: left, gap: gap)
                     case .stacked(let top, let gap): stacked(top: top, gap: gap)
                     case .threePane: threePane
@@ -92,7 +92,8 @@ struct ProjectView: View {
 
     // MARK: arrangements
 
-    var compact: some View {
+    /// One column. The panel takes less room on short screens (the iPhone Duo's outer screen) so the 3D view stays usable.
+    func compact(_ size: CGSize) -> some View {
         VStack(spacing: 0) {
             PlateStrip()
             canvas
@@ -100,7 +101,7 @@ struct ProjectView: View {
                 .layoutPriority(1)
             panelPicker
             panelContent
-                .frame(height: 330)
+                .frame(height: max(220, min(330, size.height * 0.42)))
         }
     }
 

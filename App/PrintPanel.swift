@@ -178,7 +178,8 @@ struct ToolheadSection: View {
                     Circle().fill(model.color(of: f)).frame(width: 14, height: 14).overlay(Circle().stroke(.secondary.opacity(0.4), lineWidth: 0.5))
                     Text("F\(f) \(filamentType(f))").font(.subheadline)
                     Spacer()
-                    Picker("Head", selection: Binding(get: { model.tool(for: f) ?? 0 }, set: { model.setTool($0, for: f) })) {
+                    Picker("Head", selection: Binding(get: { model.tool(for: f) ?? -1 }, set: { if $0 >= 0 { model.setTool($0, for: f) } })) {
+                        if model.tool(for: f) == nil { Text("Choose a head").tag(-1) }
                         ForEach(0..<max(1, model.target.tools), id: \.self) { t in
                             Text(headLabel(t)).tag(t)
                         }
