@@ -33,6 +33,7 @@ jobs:
     name: App compiles + simulator screenshots
     # Xcode 27.1 / iOS 27.1 SDK: apps built with older SDKs run in a phone-sized window on the iPhone Duo's inner screen
     runs-on: xcode-27
+    timeout-minutes: 100
     permissions:
       contents: write
     steps:
@@ -66,8 +67,6 @@ jobs:
       - name: Screenshots
         continue-on-error: true
         timeout-minutes: 25
-        env:
-          SHOTS_DEVICES: ipad-pro
         run: ci/simulator.sh screenshots
       - name: Claude end to end (local relay + the app in the simulator)
         id: e2e
@@ -108,3 +107,48 @@ jobs:
           git add -A
           git commit -qm "Screenshots for $GITHUB_SHA"
           git push -fq origin HEAD:screenshots
+
+  inner:
+    name: iPhone Duo unfolded layouts (inner-screen size, on a 13-inch iPad)
+    runs-on: xcode-27
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - name: Select Xcode 27.1
+        run: |
+          X=/Applications/Xcode_27.1.app
+          [ -d "$X" ] || X=$(ls -d /Applications/Xcode_27.[1-9]*.app 2>/dev/null | grep -v -i candidate | sort -V | tail -1)
+          sudo xcode-select -s "$X/Contents/Developer"
+      - name: Install XcodeGen
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+          HOMEBREW_NO_INSTALL_CLEANUP: "1"
+        run: brew install xcodegen
+      - name: Build
+        run: |
+          xcodegen generate
+          xcodebuild -project A1Slicer.xcodeproj -scheme A1Slicer -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath build/dd \
+            CODE_SIGNING_ALLOWED=NO DUO_FLAGS=DUO_SDK build > build.log 2>&1 || true
+          grep -q "BUILD SUCCEEDED" build.log || { tail -40 build.log; exit 1; }
+      - name: Screenshots
+        timeout-minutes: 30
+        run: ci/simulator.sh inner
+      - name: Publish to the screenshots-inner branch
+        if: always() && github.event_name == 'push'
+        run: |
+          [ -n "$(ls shots/*.png 2>/dev/null)" ] || exit 0
+          cp -R shots "$RUNNER_TEMP/shots"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -q --orphan inner-publish
+          git rm -rfq .
+          rm -rf build shots
+          git clean -fdxq
+          cp "$RUNNER_TEMP"/shots/*.png "$RUNNER_TEMP"/shots/*.txt . 2>/dev/null || true
+          printf '# iPhone Duo unfolded layouts\n\nFrom %s (%s).\n' "$GITHUB_SHA" "$GITHUB_REF_NAME" > README.md
+          git add -A
+          git commit -qm "Inner-screen screenshots for $GITHUB_SHA"
+          git push -fq origin HEAD:screenshots-inner

@@ -2,7 +2,8 @@
 # Simulator checks for CI (run from the repository root after building into build/dd):
 #   ci/simulator.sh screenshots   demo screens on the iPhone Duo, an iPhone and an iPad mini -> shots/
 #   ci/simulator.sh claude        relay (wrangler dev) + the app: Claude's tools end to end -> shots/claude-*
-#   ci/simulator.sh unfold        unfold the iPhone Duo through Device Hub and shoot the inner screen -> shots/duo-inner-*
+#   ci/simulator.sh inner         the iPhone Duo's unfolded layouts at the inner screen's size, on a 13-inch iPad -> shots/duo-inner-*
+#   ci/simulator.sh unfold        try to unfold the iPhone Duo simulator through Device Hub and shoot its inner screen
 set -u
 APP="build/dd/Build/Products/Debug-iphonesimulator/Duo Slicer.app"
 BUNDLE=Com.jorgegzuniga.duoslicer
@@ -76,15 +77,16 @@ shot() {  # label udid name -- launch args...
 case "${1:-screenshots}" in
 screenshots)
   { limit 30 xcrun simctl help; limit 30 xcrun simctl io help; xcrun simctl list devices available; } > shots/simctl-help.txt 2>&1 || true
-  # the iPhone Duo every time; other devices when SHOTS_DEVICES asks for them (e.g. "iphone ipad-mini")
-  specs="duo:^iPhone_Duo$"
+  # other devices when SHOTS_DEVICES asks for them (e.g. "iphone ipad-mini"), one at a time, then the iPhone Duo,
+  # which stays booted for the Claude end-to-end run
+  specs=""
   for extra in ${SHOTS_DEVICES:-}; do
     case $extra in
       iphone) specs="$specs iphone:^iPhone_1[0-9]_Pro$" ;;
       ipad-mini) specs="$specs ipad-mini:^iPad_mini" ;;
-      ipad-pro) specs="$specs ipad-pro:^iPad_Pro_13" ;;
     esac
   done
+  specs="$specs duo:^iPhone_Duo$"
   for spec in $specs; do
     spec=${spec//_/ }
     label=${spec%%:*}
@@ -98,17 +100,6 @@ screenshots)
       DISPLAYS=$(screens shots/duo-screens.txt | awk '{print $1}' | xargs)
       [ -z "$DISPLAYS" ] && DISPLAYS="1 3"
     fi
-    if [ "$label" = ipad-pro ]; then
-      # the iPhone Duo's unfolded layouts, drawn at the inner screen's size on the 13-inch iPad (the Duo simulator boots folded)
-      shot "$label" "$udid" duo-wide-plate -DuoDemo YES -DuoDemoPrinter bambu-x1c -DuoDemoPanel plate -DuoDemoInner wide -DuoDemoShowFold YES
-      shot "$label" "$udid" duo-wide-preview -DuoDemo YES -DuoDemoPrinter bambu-x1c -DuoDemoSlice YES -DuoDemoPanel preview -DuoDemoInner wide
-      shot "$label" "$udid" duo-wide-u1-print -DuoDemo YES -DuoDemoPrinter snapmaker-u1 -DuoDemoSlice YES -DuoDemoPanel print -DuoDemoInner wide
-      shot "$label" "$udid" duo-wide-home -DuoDemo YES -DuoDemoHome YES -DuoDemoPrinter bambu-x1c -DuoDemoInner wide
-      shot "$label" "$udid" duo-tall-plate -DuoDemo YES -DuoDemoPrinter bambu-x1c -DuoDemoPanel plate -DuoDemoInner tall -DuoDemoShowFold YES
-      shot "$label" "$udid" duo-tall-settings -DuoDemo YES -DuoDemoPrinter snapmaker-u1 -DuoDemoPanel settings -DuoDemoInner tall
-      limit 60 xcrun simctl shutdown "$udid" 2>/dev/null || true
-      continue
-    fi
     shot "$label" "$udid" plate -DuoDemo YES -DuoDemoPrinter bambu-x1c -DuoDemoPanel plate
     shot "$label" "$udid" u1-print -DuoDemo YES -DuoDemoPrinter snapmaker-u1 -DuoDemoSlice YES -DuoDemoPanel print
     if [ "$label" = duo ]; then  # the full set on the iPhone Duo
@@ -120,6 +111,23 @@ screenshots)
     # keep the iPhone Duo running for the Claude end-to-end run
     [ "$label" = duo ] || { limit 60 xcrun simctl shutdown "$udid" 2>/dev/null || true; }
   done
+  ;;
+inner)
+  # The iPhone Duo's unfolded layouts, drawn at the inner screen's size (951 x 669 held wide, 669 x 951 held tall)
+  # on the 13-inch iPad, since the Duo simulator boots folded and simctl can't unfold it.
+  udid=$(pick "^iPad Pro 13")
+  [ -z "$udid" ] && udid=$(pick "^iPad Air 13")
+  [ -z "$udid" ] && { echo "no 13-inch iPad simulator"; exit 0; }
+  boot "$udid"
+  label=duo-inner
+  shot "$label" "$udid" wide-plate -DuoDemo YES -DuoDemoPrinter bambu-x1c -DuoDemoPanel plate -DuoDemoInner wide -DuoDemoShowFold YES
+  shot "$label" "$udid" wide-preview -DuoDemo YES -DuoDemoPrinter bambu-x1c -DuoDemoSlice YES -DuoDemoPanel preview -DuoDemoInner wide
+  shot "$label" "$udid" wide-u1-print -DuoDemo YES -DuoDemoPrinter snapmaker-u1 -DuoDemoSlice YES -DuoDemoPanel print -DuoDemoInner wide
+  shot "$label" "$udid" wide-settings -DuoDemo YES -DuoDemoPrinter snapmaker-u1 -DuoDemoPanel settings -DuoDemoInner wide
+  shot "$label" "$udid" wide-home -DuoDemo YES -DuoDemoHome YES -DuoDemoPrinter bambu-x1c -DuoDemoInner wide
+  shot "$label" "$udid" tall-plate -DuoDemo YES -DuoDemoPrinter bambu-x1c -DuoDemoPanel plate -DuoDemoInner tall -DuoDemoShowFold YES
+  shot "$label" "$udid" tall-preview -DuoDemo YES -DuoDemoPrinter bambu-x1c -DuoDemoSlice YES -DuoDemoPanel preview -DuoDemoInner tall
+  shot "$label" "$udid" tall-home -DuoDemo YES -DuoDemoHome YES -DuoDemoPrinter snapmaker-u1 -DuoDemoInner tall
   ;;
 unfold)
   # The simulator boots the iPhone Duo folded (outer screen on, inner screen dark) and simctl can't unfold it,
@@ -218,7 +226,7 @@ unfold)
     limit 30 xcrun simctl terminate "$udid" "$BUNDLE" 2>/dev/null || true
     limit 60 xcrun simctl launch "$udid" "$BUNDLE" "$@" > /dev/null 2>> "$P" || true
     sleep 16
-    limit 45 xcrun simctl io "$udid" screenshot --display="$INNER" "shots/duo-inner-$name.png" >> "$P" 2>&1 && note "shot inner $name"
+    limit 45 xcrun simctl io "$udid" screenshot --display="$INNER" "shots/duo-unfolded-$name.png" >> "$P" 2>&1 && note "shot inner $name"
   }
   ishot tall-plate -DuoDemo YES -DuoDemoPrinter bambu-x1c -DuoDemoPanel plate -DuoDemoOrientation portrait -DuoDemoShowFold YES
   ishot wide-plate -DuoDemo YES -DuoDemoPrinter bambu-x1c -DuoDemoPanel plate -DuoDemoOrientation landscape -DuoDemoShowFold YES
