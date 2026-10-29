@@ -65,6 +65,32 @@ final class SlicerEngine {
     func autoFlat(object: Int) { _ = a1_auto_flat(handle, Int32(object)) }
     func reset(object: Int) { _ = a1_reset_transform(handle, Int32(object)) }
     func centerPlate(_ plate: Int) { _ = a1_center_plate(handle, Int32(plate)) }
+    func move(object: Int, dx: Double, dy: Double) { _ = a1_move_object(handle, Int32(object), dx, dy) }
+    func place(object: Int, x: Double, y: Double) { _ = a1_place_object(handle, Int32(object), x, y) }
+    func addPlate() -> Int { Int(a1_add_plate(handle)) }
+    func removePlate(_ plate: Int) -> Bool { a1_remove_plate(handle, Int32(plate)) == 0 }
+    func undo() -> Bool { a1_undo(handle) == 0 }
+
+    struct PlacementResult: Decodable {
+        var ok: Bool?
+        var error: String?
+        var plate: Int?           // move to plate: where it went
+        var placed: Int?          // arrange: objects placed on the bed
+        var leftOver: [String]?   // arrange: objects that didn't fit
+        var project: ProjectInfo?
+    }
+
+    func arrange(plate: Int, allowRotation: Bool) -> PlacementResult {
+        let opts = allowRotation ? #"{"allow_rotation":true}"# : "{}"
+        let out = take(a1_arrange(handle, Int32(plate), opts))
+        return (try? JSONCoding.decoder.decode(PlacementResult.self, from: out)) ?? PlacementResult(error: "The slicer returned an unreadable result.")
+    }
+
+    /// plate -1 (or the plate count) makes a new plate.
+    func moveToPlate(object: Int, plate: Int) -> PlacementResult {
+        let out = take(a1_move_to_plate(handle, Int32(object), Int32(plate)))
+        return (try? JSONCoding.decoder.decode(PlacementResult.self, from: out)) ?? PlacementResult(error: "The slicer returned an unreadable result.")
+    }
 
     struct Mesh {
         var positions: [Float]   // 9 per triangle, printer coordinates (mm)

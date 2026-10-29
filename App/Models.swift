@@ -10,6 +10,7 @@ struct ProjectInfo: Codable {
     var defaultProcess: String
     var filamentPresets: [String]
     var bedType: String
+    var canUndo: Bool?
 }
 
 /// The printer the engine is slicing for (from the engine's profile bundle).
@@ -47,6 +48,9 @@ struct PlateInfo: Codable, Identifiable, Hashable {
     var height: Double
     var toolMap: [Int]?          // tool changers: default toolhead per project filament (-1 = unused)
     var needsMoreTools: Bool?
+    var empty: Bool?
+
+    var isEmpty: Bool { empty ?? objects.isEmpty }
 }
 
 struct ObjectInfo: Codable, Identifiable, Hashable {
@@ -60,6 +64,12 @@ struct ObjectInfo: Codable, Identifiable, Hashable {
     var min: [Double]
     var max: [Double]
     var overrides: [String: String]?
+
+    /// Middle of its footprint on the bed (mm).
+    var center: (x: Double, y: Double) {
+        guard min.count >= 2, max.count >= 2 else { return (0, 0) }
+        return ((min[0] + max[0]) / 2, (min[1] + max[1]) / 2)
+    }
 }
 
 struct SlicedFilament: Codable, Hashable, Identifiable {

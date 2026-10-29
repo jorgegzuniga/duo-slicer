@@ -25,6 +25,9 @@ final class AppModel: ObservableObject {
     @Published var previewLayer = 0
     @Published var preview: SlicerEngine.LayerPreview?
     @Published var previewZ = 0.0
+    /// A short message over the 3D view ("Moved Tag 2 to Plate 3"); clears itself.
+    @Published var notice: String?
+    private var noticeTask: Task<Void, Never>?
     /// Printer model the plates are sliced for (follows the selected printer).
     @Published private(set) var target: PrinterModel
 
@@ -176,6 +179,7 @@ final class AppModel: ObservableObject {
             }
             thumbnails = thumbs
             await refreshMesh()
+            await refreshThumbnails(old: info, new: info)
             await refreshEffective()
         }
     }
@@ -205,10 +209,122 @@ final class AppModel: ObservableObject {
     }
 
     private func afterTransform() async {
+        let old = project
         let info: ProjectInfo? = await run { try? $0.info() }
-        if let info { project = info }
-        if slicedPlate == plateIndex { slice = nil; slicedPlate = nil; preview = nil }
+        if let info { await adopt(info, old: old) }
+    }
+
+    /// Take the project after a placement edit: drop a slice of a plate that changed, refresh the 3D view and the
+    /// pictures of the plates that changed.
+    private func adopt(_ info: ProjectInfo, old: ProjectInfo?) async {
+        project = info
+        if plateIndex >= info.plates.count { plateIndex = max(0, info.plates.count - 1) }
+        if let s = selectedObject, !(plate?.objects.contains { $0.index == s } ?? false) { selectedObject = nil }
+        if let sp = slicedPlate {
+            let before = old.flatMap { $0.plates.indices.contains(sp) ? $0.plates[sp].objects : nil }
+            let after = info.plates.indices.contains(sp) ? info.plates[sp].objects : nil
+            if before != after { slice = nil; slicedPlate = nil; preview = nil }
+        }
         await refreshMesh()
+        await refreshThumbnails(old: old, new: info)
+    }
+
+    /// Draw pictures for plates whose objects changed, and for plates the 3MF has no picture of.
+    private func refreshThumbnails(old: ProjectInfo?, new info: ProjectInfo) async {
+        var changed: [Int] = []
+        for (i, p) in info.plates.enumerated() {
+            let before = old.flatMap { $0.plates.indices.contains(i) ? $0.plates[i] : nil }
+            if before?.objects != p.objects || thumbnails[i] == nil { changed.append(i) }
+        }
+        thumbnails = thumbnails.filter { $0.key < info.plates.count }
+        guard !changed.isEmpty else { return }
+        let colors = options.colors.isEmpty ? info.filaments.map(\.color) : options.colors
+        let bed = self.bed
+        let images: [Int: UIImage] = await run { eng in
+            var out: [Int: UIImage] = [:]
+            for i in changed { out[i] = PlateThumbnail.render(eng.plateMesh(i), colors: colors, bed: bed) }
+            return out
+        }
+        for (i, img) in images { thumbnails[i] = img }
+    }
+
+    // MARK: moving objects and plates
+
+    var canUndo: Bool { project?.canUndo ?? false }
+
+    func say(_ text: String) {
+        notice = text
+        noticeTask?.cancel()
+        noticeTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 3_500_000_000)
+            if !Task.isCancelled { self?.notice = nil }
+        }
+    }
+
+    func plateLabel(_ i: Int) -> String {
+        guard let p = project?.plates[safe: i] else { return "Plate \(i + 1)" }
+        return p.name == "Plate \(p.id)" ? p.name : "Plate \(p.id) (\(p.name))"
+    }
+
+    func move(object o: Int, dx: Double, dy: Double) async {
+        await run { $0.move(object: o, dx: dx, dy: dy) }
+        await afterTransform()
+    }
+
+    /// Put the middle of an object's footprint at (x, y) on the bed.
+    func place(object o: Int, x: Double, y: Double) async {
+        await run { $0.place(object: o, x: x, y: y) }
+        await afterTransform()
+    }
+
+    /// Pack the current plate's objects front-left first and centre them. Returns the names of objects that didn't fit.
+    @discardableResult
+    func arrangePlate(_ p: Int? = nil, allowRotation: Bool = false) async -> [String] {
+        let plate = p ?? plateIndex
+        let old = project
+        let r = await run { $0.arrange(plate: plate, allowRotation: allowRotation) }
+        if let e = r.error { errorMessage = e; return [] }
+        if let info = r.project { await adopt(info, old: old) }
+        let left = r.leftOver ?? []
+        if left.isEmpty {
+            say("Arranged \(r.placed ?? 0) object\((r.placed ?? 0) == 1 ? "" : "s")")
+        } else {
+            say("\(left.joined(separator: ", ")) didn't fit; move \(left.count == 1 ? "it" : "them") to another plate")
+        }
+        return left
+    }
+
+    /// Move an object to another plate (nil: a new plate). Returns the plate it went to.
+    @discardableResult
+    func moveObject(_ o: Int, toPlate target: Int?) async -> Int? {
+        let old = project
+        let name = old?.plates.flatMap(\.objects).first { $0.index == o }?.name ?? "Object"
+        let r = await run { $0.moveToPlate(object: o, plate: target ?? -1) }
+        if let e = r.error { errorMessage = e; return nil }
+        if selectedObject == o { selectedObject = nil }
+        if let info = r.project { await adopt(info, old: old) }
+        if let p = r.plate { say("Moved \(name) to \(plateLabel(p))") }
+        return r.plate
+    }
+
+    @discardableResult
+    func addPlate() async -> Int {
+        let i = await run { $0.addPlate() }
+        await afterTransform()
+        return i
+    }
+
+    func removePlate(_ p: Int) async {
+        let ok = await run { $0.removePlate(p) }
+        if ok { await afterTransform() }
+    }
+
+    func undo() async {
+        let ok = await run { $0.undo() }
+        if ok {
+            await afterTransform()
+            say("Undone")
+        }
     }
 
     func rotate(axis: Int, degrees: Double) async {
@@ -344,10 +460,11 @@ final class AppModel: ObservableObject {
 
     // MARK: slicing
 
-    /// PNG thumbnails Klipper printers show on their screen (48 and 300 px squares).
+    /// Plate pictures for the printer: Klipper printers show 48 and 300 px squares on their screen; Bambu printers
+    /// show the plate picture in the .gcode.3mf (512 px).
     private func gcodeThumbnails() -> [Data] {
-        guard target.isToolChanger, let img = thumbnails[plateIndex] else { return [] }
-        return [48, 300].map { side in
+        guard let img = thumbnails[plateIndex] else { return [] }
+        return (target.isToolChanger ? [48, 300] : [512]).map { side in
             let fmt = UIGraphicsImageRendererFormat()
             fmt.scale = 1
             fmt.opaque = false
@@ -422,4 +539,8 @@ final class AppModel: ObservableObject {
         guard let data = await slicedFile() else { throw SlicerEngine.EngineError.message("The sliced file is missing. Slice again.") }
         try await printer.startPrint(file: data, summary: s, jobName: jobName, mapping: mapping, options: start)
     }
+}
+
+extension Array {
+    subscript(safe i: Int) -> Element? { indices.contains(i) ? self[i] : nil }
 }

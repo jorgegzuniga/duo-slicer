@@ -146,8 +146,20 @@ struct ProjectView: View {
     var moreMenu: some View {
         Menu {
             Button {
+                Task { await model.arrangePlate() }
+            } label: { Label("Arrange plate", systemImage: "square.grid.3x3.square") }
+            .disabled(model.plate?.isEmpty ?? true)
+            Button {
                 Task { await model.centerPlate() }
             } label: { Label("Center plate on bed", systemImage: "arrow.up.and.down.and.arrow.left.and.right") }
+            Button {
+                Task { let i = await model.addPlate(); await model.selectPlate(i) }
+            } label: { Label("New plate", systemImage: "plus.rectangle.on.rectangle") }
+            if model.canUndo {
+                Button {
+                    Task { await model.undo() }
+                } label: { Label("Undo", systemImage: "arrow.uturn.backward") }
+            }
             Button {
                 Task { shareURL = await model.exportProjectFile() }
             } label: { Label("Share edited 3MF", systemImage: "square.and.arrow.up") }
@@ -204,7 +216,8 @@ struct ProjectView: View {
                 PlateSceneView(bed: model.bed, mesh: model.mesh, revision: model.meshRevision, colors: model.options.colors, selected: model.selectedObject,
                                pickFace: pickFace,
                                onSelect: { obj in model.selectedObject = obj; if obj == nil { pickFace = false } },
-                               onFace: { _, n in pickFace = false; Task { await model.layFlat(normal: n) } })
+                               onFace: { _, n in pickFace = false; Task { await model.layFlat(normal: n) } },
+                               onMove: { obj, dx, dy in Task { await model.move(object: obj, dx: dx, dy: dy) } })
                     .ignoresSafeArea(edges: .horizontal)
                 if model.selectedObject != nil { OrientBar(pickFace: $pickFace).padding(.top, 8) }
                 if pickFace {
@@ -216,6 +229,34 @@ struct ProjectView: View {
                 }
             }
         }
+        .overlay(alignment: .bottomLeading) {
+            if model.canUndo && !(panel == .preview && model.sliceIsCurrent) {
+                Button {
+                    Task { await model.undo() }
+                } label: {
+                    Label("Undo", systemImage: "arrow.uturn.backward")
+                        .font(.footnote.weight(.semibold))
+                        .padding(.horizontal, 12).padding(.vertical, 8)
+                        .background(.regularMaterial, in: Capsule())
+                }
+                .keyboardShortcut("z", modifiers: .command)
+                .padding(12)
+            }
+        }
+        .overlay(alignment: .bottom) {
+            if let n = model.notice {
+                Text(n)
+                    .font(.footnote.weight(.medium))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 14).padding(.vertical, 8)
+                    .background(.thinMaterial, in: Capsule())
+                    .padding(.bottom, 56)
+                    .padding(.horizontal, 24)
+                    .transition(.opacity)
+                    .allowsHitTesting(false)
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: model.notice)
         // full-bleed under the home indicator when the 3D view is at the bottom (side-by-side layouts)
         .ignoresSafeArea(edges: .bottom)
     }
@@ -305,6 +346,7 @@ struct PlateSidebar: View {
                 ForEach(model.project?.plates ?? []) { p in
                     PlateCard(plate: p)
                 }
+                NewPlateCard()
             }
             .padding(10)
         }
@@ -330,6 +372,7 @@ struct PlateStrip: View {
                     ForEach(model.project?.plates ?? []) { p in
                         PlateCard(plate: p).id(p.index)
                     }
+                    NewPlateCard()
                 }
                 .padding(.horizontal)
                 .padding(.vertical, 8)
@@ -366,6 +409,7 @@ struct PlateCard: View {
                     }
                     Text(p.name).font(.caption).lineLimit(1).frame(maxWidth: 130, alignment: .leading)
                     HStack(spacing: 3) {
+                        if p.isEmpty { Text("Empty").font(.caption2).foregroundStyle(.secondary) }
                         ForEach(p.filaments, id: \.self) { f in Circle().fill(model.color(of: f)).frame(width: 8, height: 8).overlay(Circle().stroke(.secondary.opacity(0.4), lineWidth: 0.5)) }
                     }
                 }
@@ -376,6 +420,18 @@ struct PlateCard: View {
             .overlay(RoundedRectangle(cornerRadius: 10).stroke(p.index == model.plateIndex ? Theme.accent : .clear, lineWidth: 1.5))
         }
         .buttonStyle(.plain)
+        .contextMenu {
+            if !p.isEmpty {
+                Button {
+                    Task { await model.selectPlate(p.index); await model.arrangePlate(p.index) }
+                } label: { Label("Arrange", systemImage: "square.grid.3x3.square") }
+            }
+            if p.isEmpty && (model.project?.plates.count ?? 0) > 1 {
+                Button(role: .destructive) {
+                    Task { await model.removePlate(p.index) }
+                } label: { Label("Remove plate", systemImage: "trash") }
+            }
+        }
     }
 
     /// AMS slots or toolheads available on the target printer.
@@ -402,6 +458,19 @@ struct OrientBar: View {
             }
             button("Auto flat", "arrow.down.to.line") { await model.autoFlat() }
             button("Reset", "arrow.uturn.backward") { await model.resetObject() }
+            if let o = model.selectedObject {
+                Divider().frame(height: 24)
+                Menu {
+                    MoveToPlateItems(object: o)
+                } label: {
+                    VStack(spacing: 1) {
+                        Image(systemName: "rectangle.portrait.on.rectangle.portrait").font(.system(size: 14))
+                        Text("Plate").font(.system(size: 9, weight: .medium))
+                    }
+                    .frame(minWidth: 40)
+                    .padding(.vertical, 4)
+                }
+            }
         }
         .padding(4)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
@@ -433,6 +502,36 @@ struct PlatePanel: View {
                         stat(String(format: "%.1f mm", p.height), "height")
                         stat("\(p.filaments.count)", p.filaments.count == 1 ? "colour" : "colours")
                     }
+                    HStack(spacing: 10) {
+                        Button {
+                            Task { await model.arrangePlate() }
+                        } label: {
+                            Label("Arrange", systemImage: "square.grid.3x3.square")
+                        }
+                        .disabled(p.isEmpty)
+                        Menu {
+                            Button {
+                                Task { await model.arrangePlate(allowRotation: true) }
+                            } label: { Label("Arrange, turning parts to fit", systemImage: "rotate.right") }
+                            .disabled(p.isEmpty)
+                            Button {
+                                Task { await model.centerPlate() }
+                            } label: { Label("Center on bed", systemImage: "arrow.up.and.down.and.arrow.left.and.right") }
+                            Button {
+                                Task { let i = await model.addPlate(); await model.selectPlate(i) }
+                            } label: { Label("New plate", systemImage: "plus.rectangle.on.rectangle") }
+                            if p.isEmpty && (model.project?.plates.count ?? 0) > 1 {
+                                Button(role: .destructive) {
+                                    Task { await model.removePlate(p.index) }
+                                } label: { Label("Remove this plate", systemImage: "trash") }
+                            }
+                        } label: {
+                            Label("More", systemImage: "ellipsis.circle")
+                        }
+                        Spacer()
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
                     if p.offBed {
                         VStack(alignment: .leading, spacing: 8) {
                             ForEach(p.fitIssues ?? ["Part of this plate doesn't fit on the \(model.target.shortName)'s bed."], id: \.self) { issue in
@@ -456,6 +555,15 @@ struct PlatePanel: View {
                             .font(.footnote).foregroundStyle(.orange)
                     }
                 }
+                if let sel = model.selectedObject, let o = p.objects.first(where: { $0.index == sel }) {
+                    ObjectPositionSection(object: o)
+                }
+                if p.isEmpty {
+                    Section {
+                        Text("This plate is empty. Move objects here from another plate: select one there, then Plate › \(model.plateLabel(p.index)).")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
+                }
                 Section("Colours on this plate") {
                     ForEach(p.filaments, id: \.self) { f in FilamentRow(filament: f) }
                 }
@@ -473,11 +581,16 @@ struct PlatePanel: View {
                                 if model.selectedObject == o.index { Image(systemName: "checkmark").foregroundStyle(Theme.accent) }
                             }
                         }
+                        .contextMenu {
+                            Menu {
+                                MoveToPlateItems(object: o.index)
+                            } label: { Label("Move to plate", systemImage: "rectangle.portrait.on.rectangle.portrait") }
+                        }
                     }
                 } header: {
                     Text("Objects")
                 } footer: {
-                    Text("Tap an object here or in the 3D view to rotate it.")
+                    Text("Tap an object here or in the 3D view to select it, then drag it on the bed, rotate it or move it to another plate.")
                 }
             }
             .listStyle(.insetGrouped)
@@ -518,5 +631,133 @@ struct FilamentRow: View {
             }
             .labelsHidden()
         }
+    }
+}
+
+/// Menu items that send an object to another plate of the project, or to a new one.
+struct MoveToPlateItems: View {
+    @EnvironmentObject var model: AppModel
+    let object: Int
+
+    var body: some View {
+        ForEach(model.project?.plates ?? []) { p in
+            if !p.objects.contains(where: { $0.index == object }) {
+                Button {
+                    Task { await model.moveObject(object, toPlate: p.index) }
+                } label: {
+                    Text(model.plateLabel(p.index))
+                }
+            }
+        }
+        Button {
+            Task { await model.moveObject(object, toPlate: nil) }
+        } label: {
+            Label("New plate", systemImage: "plus")
+        }
+    }
+}
+
+/// The "+" card after the plates.
+struct NewPlateCard: View {
+    @EnvironmentObject var model: AppModel
+
+    var body: some View {
+        Button {
+            Task {
+                let i = await model.addPlate()
+                await model.selectPlate(i)
+            }
+        } label: {
+            VStack(spacing: 4) {
+                Image(systemName: "plus").font(.system(size: 16, weight: .semibold))
+                Text("New plate").font(.caption2)
+            }
+            .foregroundStyle(Theme.accent)
+            .frame(width: 72, height: 52)
+            .background(RoundedRectangle(cornerRadius: 10).strokeBorder(Theme.accent.opacity(0.5), style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("New plate")
+    }
+}
+
+/// Where the selected object sits on the bed: type a position or nudge it.
+struct ObjectPositionSection: View {
+    @EnvironmentObject var model: AppModel
+    let object: ObjectInfo
+    @State private var x = ""
+    @State private var y = ""
+    @State private var step = 1.0
+
+    var body: some View {
+        Section {
+            HStack(spacing: 10) {
+                field("X", $x)
+                field("Y", $y)
+                Button("Move") {
+                    let c = object.center
+                    Task { await model.place(object: object.index, x: Double(x.replacingOccurrences(of: ",", with: ".")) ?? c.x,
+                                             y: Double(y.replacingOccurrences(of: ",", with: ".")) ?? c.y) }
+                }
+                .buttonStyle(.bordered)
+                .disabled(!changed)
+            }
+            HStack(spacing: 6) {
+                nudge("arrow.left", -step, 0)
+                nudge("arrow.down", 0, -step)
+                nudge("arrow.up", 0, step)
+                nudge("arrow.right", step, 0)
+                Spacer(minLength: 8)
+                Picker("Step", selection: $step) {
+                    Text("1 mm").tag(1.0)
+                    Text("5 mm").tag(5.0)
+                    Text("10 mm").tag(10.0)
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+            }
+            Menu {
+                MoveToPlateItems(object: object.index)
+            } label: {
+                Label("Move to another plate", systemImage: "rectangle.portrait.on.rectangle.portrait")
+            }
+        } header: {
+            Text(object.name)
+        } footer: {
+            Text("Drag the object in the 3D view, or set where its middle sits on the bed (mm from the front-left corner). Up moves it towards the back.")
+        }
+        .onAppear(perform: load)
+        .onChange(of: object) { _, _ in load() }
+    }
+
+    var changed: Bool {
+        let c = object.center
+        return String(format: "%.1f", c.x) != x || String(format: "%.1f", c.y) != y
+    }
+
+    func load() {
+        let c = object.center
+        x = String(format: "%.1f", c.x)
+        y = String(format: "%.1f", c.y)
+    }
+
+    func field(_ label: String, _ text: Binding<String>) -> some View {
+        HStack(spacing: 4) {
+            Text(label).font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
+            TextField(label, text: text)
+                .keyboardType(.decimalPad)
+                .font(.body.monospacedDigit())
+                .frame(minWidth: 56)
+        }
+    }
+
+    func nudge(_ icon: String, _ dx: Double, _ dy: Double) -> some View {
+        Button {
+            Task { await model.move(object: object.index, dx: dx, dy: dy) }
+        } label: {
+            Image(systemName: icon).frame(width: 22, height: 22)
+        }
+        .buttonStyle(.bordered)
+        .accessibilityLabel(dx < 0 ? "Left" : dx > 0 ? "Right" : dy > 0 ? "Back" : "Front")
     }
 }

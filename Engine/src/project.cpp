@@ -208,7 +208,9 @@ std::unique_ptr<Project> Project::load(const std::string& bytes) {
     struct PartInfo { std::string subtype; int extruder; };
     struct ObjInfo { std::string name; int extruder = 1; std::vector<PartInfo> parts; std::map<std::string, std::string> own; };
     std::map<std::string, ObjInfo> infos;
-    struct PlateDef { int id; std::string name, thumb; std::vector<std::string> ids; };
+    struct InstanceDef { std::string objectId, instanceId, identifyId; };
+    struct PlateDef { int id; std::string name, thumb; std::vector<std::string> ids; std::vector<InstanceDef> instances;
+                      std::vector<std::pair<std::string, std::string>> meta; };
     std::vector<PlateDef> plateDefs;
     if (z.has("Metadata/model_settings.config")) {
         std::string ms = z.read("Metadata/model_settings.config");
@@ -263,9 +265,11 @@ std::unique_ptr<Project> Project::load(const std::string& bytes) {
             pd.id = kv.count("plater_id") ? std::atoi(kv["plater_id"].c_str()) : (int)plateDefs.size() + 1;
             pd.name = kv["plater_name"];
             pd.thumb = kv["thumbnail_file"];
+            for (auto& m : kv) pd.meta.push_back(m);
             eachBlock(bb, be, "model_instance", [&](const char*, const char*, const char* ib, const char* ie) {
                 auto ikv = metaOf(ib, ie, false);
                 pd.ids.push_back(ikv["object_id"]);
+                pd.instances.push_back({ikv["object_id"], ikv.count("instance_id") ? ikv["instance_id"] : "0", ikv["identify_id"]});
             });
             plateDefs.push_back(pd);
         });
@@ -281,8 +285,10 @@ std::unique_ptr<Project> Project::load(const std::string& bytes) {
     for (size_t i = 0; i < plateDefs.size(); ++i) {
         Plate pl;
         pl.id = plateDefs[i].id;
-        pl.name = plateDefs[i].name.empty() ? "Plate " + std::to_string(pl.id) : plateDefs[i].name;
+        pl.named = !plateDefs[i].name.empty();
+        pl.name = pl.named ? plateDefs[i].name : "Plate " + std::to_string(pl.id);
         pl.thumb = z.has(plateDefs[i].thumb) ? plateDefs[i].thumb : "";
+        pl.meta = plateDefs[i].meta;
         pl.ox = pl.ox0 = (i % cols) * sx;
         pl.oy = pl.oy0 = -(double)(i / cols) * sy;
         P->plates.push_back(pl);
@@ -294,7 +300,8 @@ std::unique_ptr<Project> Project::load(const std::string& bytes) {
         if (d == defs.end()) continue;
         Object obj;
         obj.id = it.id;
-        obj.item = obj.item0 = it.m;
+        obj.item = obj.item0 = obj.itemFile = it.m;
+        obj.identifyId = it.id;
         ObjInfo oi;
         if (infos.count(it.id)) oi = infos[it.id];
         obj.name = oi.name.empty() ? "Object " + it.id : oi.name;
@@ -333,6 +340,14 @@ std::unique_ptr<Project> Project::load(const std::string& bytes) {
         // plate assignment
         int plate = -1;
         for (size_t pi = 0; pi < plateDefs.size() && plate < 0; ++pi)
+            for (auto& inst : plateDefs[pi].instances)
+                if (inst.objectId == it.id) {
+                    plate = (int)pi;
+                    obj.instanceId = inst.instanceId.empty() ? "0" : inst.instanceId;
+                    if (!inst.identifyId.empty()) obj.identifyId = inst.identifyId;
+                    break;
+                }
+        for (size_t pi = 0; pi < plateDefs.size() && plate < 0; ++pi)
             if (std::find(plateDefs[pi].ids.begin(), plateDefs[pi].ids.end(), it.id) != plateDefs[pi].ids.end()) plate = (int)pi;
         if (plate < 0) {
             double mn[3], mx[3];
@@ -350,6 +365,93 @@ std::unique_ptr<Project> Project::load(const std::string& bytes) {
     }
     if (P->objects.empty()) throw std::runtime_error("No printable objects found in this 3MF.");
     return P;
+}
+
+void Project::layoutPlates() {
+    int n = (int)plates.size();
+    if (n == 0) return;
+    int cols = (int)std::ceil(std::sqrt((double)n));
+    double sx = bedW * 1.2, sy = bedD * 1.2;
+    for (int i = 0; i < n; ++i) {
+        Plate& pl = plates[i];
+        double nx = (i % cols) * sx, ny = -(double)(i / cols) * sy;
+        double dx = nx - pl.ox0, dy = ny - pl.oy0;
+        if (std::fabs(dx) < 1e-9 && std::fabs(dy) < 1e-9) continue;
+        for (int oi : pl.objects) {
+            Object& o = objects[oi];
+            o.item.m[9] += dx; o.item.m[10] += dy;
+            o.item0.m[9] += dx; o.item0.m[10] += dy;
+        }
+        pl.ox0 = nx; pl.oy0 = ny;
+        pl.ox += dx; pl.oy += dy;
+    }
+}
+
+namespace {
+std::string esc(const std::string& s) {
+    std::string o;
+    for (char c : s) {
+        switch (c) {
+        case '&': o += "&amp;"; break;
+        case '<': o += "&lt;"; break;
+        case '>': o += "&gt;"; break;
+        case '"': o += "&quot;"; break;
+        default: o += c;
+        }
+    }
+    return o;
+}
+}  // namespace
+
+std::string Project::modelSettings() const {
+    std::string ms = zip->has("Metadata/model_settings.config") ? zip->read("Metadata/model_settings.config")
+                                                                  : "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<config>\n</config>\n";
+    if (!platesEdited) return ms;
+    // drop the file's plates, then write the current ones before </config>
+    for (;;) {
+        size_t a = ms.find("<plate>");
+        if (a == std::string::npos) a = ms.find("<plate ");
+        if (a == std::string::npos) break;
+        size_t b = ms.find("</plate>", a);
+        if (b == std::string::npos) break;
+        size_t lineStart = ms.rfind('\n', a);
+        lineStart = lineStart == std::string::npos ? a : lineStart + 1;
+        bool onlySpace = ms.find_first_not_of(" \t", lineStart) == a;
+        size_t end = b + 8;
+        if (end < ms.size() && ms[end] == '\n') ++end;
+        ms.erase(onlySpace ? lineStart : a, end - (onlySpace ? lineStart : a));
+    }
+    std::ostringstream os;
+    for (const Plate& pl : plates) {
+        os << "  <plate>\n";
+        os << "    <metadata key=\"plater_id\" value=\"" << pl.id << "\"/>\n";
+        os << "    <metadata key=\"plater_name\" value=\"" << esc(pl.named ? pl.name : "") << "\"/>\n";
+        bool locked = false;
+        for (auto& kv : pl.meta) {
+            const std::string& k = kv.first;
+            if (k == "plater_id" || k == "plater_name" || k == "gcode_file") continue;
+            // pictures of the old arrangement would be wrong once objects moved
+            if (pl.thumb.empty() && (k == "thumbnail_file" || k == "thumbnail_no_light_file" || k == "top_file" || k == "pick_file" ||
+                                     k == "pattern_bbox_file"))
+                continue;
+            if (k == "locked") locked = true;
+            os << "    <metadata key=\"" << esc(k) << "\" value=\"" << esc(kv.second) << "\"/>\n";
+        }
+        if (!locked) os << "    <metadata key=\"locked\" value=\"false\"/>\n";
+        for (int oi : pl.objects) {
+            const Object& o = objects[oi];
+            os << "    <model_instance>\n";
+            os << "      <metadata key=\"object_id\" value=\"" << esc(o.id) << "\"/>\n";
+            os << "      <metadata key=\"instance_id\" value=\"" << esc(o.instanceId) << "\"/>\n";
+            os << "      <metadata key=\"identify_id\" value=\"" << esc(o.identifyId) << "\"/>\n";
+            os << "    </model_instance>\n";
+        }
+        os << "  </plate>\n";
+    }
+    size_t c = ms.rfind("</config>");
+    if (c == std::string::npos) return ms + os.str();
+    ms.insert(c, os.str());
+    return ms;
 }
 
 void Project::objectBounds(const Object& o, const Mat& m, double mn[3], double mx[3]) const {

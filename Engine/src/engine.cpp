@@ -20,6 +20,13 @@
 using namespace a1;
 using json = nlohmann::json;
 
+// Placement state for undo: plates (with their object lists) and every object's transforms and plate.
+struct Placement {
+    std::vector<Plate> plates;
+    std::vector<std::tuple<Mat, Mat, int>> objects;  // item, item0, plate
+    bool platesEdited = false;
+};
+
 struct A1Engine {
     json printer;       // target printer bundle (Resources/profiles/<id>.json)
     std::string bytes;  // original archive
@@ -28,6 +35,7 @@ struct A1Engine {
     std::string lastFile;
     std::string lastKind;  // "gcode.3mf" (Bambu) or "gcode"
     int lastPlate = -1;
+    std::vector<Placement> undo;  // most recent last
 };
 
 namespace {
@@ -196,6 +204,114 @@ std::string fitMessage(const std::string& issue, const std::string& obj, const j
     if (issue == "excluded_zone") return obj + " sits in the front-left corner the " + pn + " keeps clear for cutting filament. Move it, then slice again.";
     return obj + " can't be printed on the " + pn + ".";
 }
+
+// ---- placement edits
+
+void pushUndo(A1Engine* e) {
+    if (!e->proj) return;
+    Placement s;
+    s.plates = e->proj->plates;
+    for (auto& o : e->proj->objects) s.objects.emplace_back(o.item, o.item0, o.plate);
+    s.platesEdited = e->proj->platesEdited;
+    e->undo.push_back(std::move(s));
+    if (e->undo.size() > 40) e->undo.erase(e->undo.begin());
+}
+
+struct Box {
+    double x0, y0, x1, y1;
+    double w() const { return x1 - x0; }
+    double d() const { return y1 - y0; }
+};
+
+// An object's footprint on its plate's bed (printer coordinates).
+Box footprint(const Project& P, const Object& o) {
+    const Plate& pl = P.plates[o.plate];
+    double mn[3], mx[3];
+    P.objectBounds(o, o.item, mn, mx);
+    return {mn[0] - pl.ox, mn[1] - pl.oy, mx[0] - pl.ox, mx[1] - pl.oy};
+}
+
+// Closer than `gap` (touching counts as overlapping when gap is 0).
+bool tooClose(const Box& a, const Box& b, double gap) {
+    const double eps = 1e-6;
+    return !(a.x1 + gap <= b.x0 + eps || b.x1 + gap <= a.x0 + eps || a.y1 + gap <= b.y0 + eps || b.y1 + gap <= a.y0 + eps);
+}
+
+bool insideBed(const Box& c, const Bed& b, double margin) {
+    const double eps = 1e-6;
+    return c.x0 >= b.x0 + margin - eps && c.y0 >= b.y0 + margin - eps && c.x1 <= b.x1 - margin + eps && c.y1 <= b.y1 - margin + eps;
+}
+
+bool spotFree(const Box& c, const Bed& b, double margin, double gap, const std::vector<Box>& taken) {
+    if (!insideBed(c, b, margin)) return false;
+    for (auto& t : taken)
+        if (tooClose(c, t, gap)) return false;
+    return true;
+}
+
+// Front-left-most spot for a w x d footprint on the bed, clear of `taken` by `gap` (bottom-left packing).
+bool findSpot(const Bed& b, double margin, double gap, double w, double d, const std::vector<Box>& taken, double& x, double& y) {
+    std::vector<double> xs{b.x0 + margin}, ys{b.y0 + margin};
+    for (auto& t : taken) {
+        xs.push_back(t.x1 + gap);
+        ys.push_back(t.y1 + gap);
+        xs.push_back(t.x0 - gap - w);
+        ys.push_back(t.y0 - gap - d);
+    }
+    std::sort(xs.begin(), xs.end());
+    std::sort(ys.begin(), ys.end());
+    xs.erase(std::unique(xs.begin(), xs.end(), [](double a, double c) { return std::fabs(a - c) < 1e-6; }), xs.end());
+    ys.erase(std::unique(ys.begin(), ys.end(), [](double a, double c) { return std::fabs(a - c) < 1e-6; }), ys.end());
+    for (double cy : ys)
+        for (double cx : xs) {
+            Box c{cx, cy, cx + w, cy + d};
+            if (spotFree(c, b, margin, gap, taken)) { x = cx; y = cy; return true; }
+        }
+    return false;
+}
+
+void shiftObject(Object& o, double dx, double dy) {
+    o.item.m[9] += dx;
+    o.item.m[10] += dy;
+}
+
+// Shift item and the Reset baseline together (the object changes plate, not position on its plate).
+void carryObject(Object& o, double dx, double dy) {
+    shiftObject(o, dx, dy);
+    o.item0.m[9] += dx;
+    o.item0.m[10] += dy;
+}
+
+// What an object on a plate must stay clear of: the no-print corner and the plate's other objects.
+std::vector<Box> obstacles(const Project& P, const Bed& b, int plate, int except) {
+    std::vector<Box> v;
+    if (b.hasEx()) v.push_back({b.ex0, b.ey0, b.ex1, b.ey1});
+    for (int oi : P.plates[plate].objects)
+        if (oi != except) v.push_back(footprint(P, P.objects[oi]));
+    return v;
+}
+
+// A new, empty plate at the end (the grid is laid out again for the new count).
+int addPlate(Project& P) {
+    Plate pl;
+    int maxId = 0;
+    for (auto& p : P.plates) maxId = std::max(maxId, p.id);
+    pl.id = maxId + 1;
+    pl.name = "Plate " + std::to_string(pl.id);
+    // same world -> printer bed mapping as the first plate, before layout moves it to its grid spot
+    if (!P.plates.empty()) {
+        pl.ox0 = P.plates[0].ox0;
+        pl.oy0 = P.plates[0].oy0;
+        pl.ox = P.plates[0].ox;
+        pl.oy = P.plates[0].oy;
+    }
+    P.plates.push_back(pl);
+    P.platesEdited = true;
+    P.layoutPlates();
+    return (int)P.plates.size() - 1;
+}
+
+const double kArrangeGap = 6, kBedMargin = 3;
 
 // Project filaments (1-based) used by the objects on a plate.
 std::vector<int> plateFilaments(const Project& P, int plate) {
@@ -372,6 +488,7 @@ json projectInfo(A1Engine* e) {
         }
         std::vector<int> fil = plateFilaments(P, (int)pi);
         pj["filaments"] = fil;
+        pj["empty"] = pl.objects.empty();
         pj["off_bed"] = off;
         pj["fit_issues"] = issues;
         pj["height"] = zmax;
@@ -405,12 +522,13 @@ json projectInfo(A1Engine* e) {
     std::string bt = P.cfg.value("curr_bed_type", std::string("Textured PEI Plate"));
     if (!beds.empty() && std::find(beds.begin(), beds.end(), bt) == beds.end()) bt = beds.front();
     j["bed_type"] = bt;
+    j["can_undo"] = !e->undo.empty();
     return j;
 }
 
 std::string replaceItemTransforms(std::string model, const Project& P) {
     for (auto& o : P.objects) {
-        if (o.item.m == o.item0.m) continue;
+        if (o.item.m == o.itemFile.m) continue;
         std::string key = "objectid=\"" + o.id + "\"";
         size_t p = 0;
         while ((p = model.find("<item", p)) != std::string::npos) {
@@ -470,9 +588,10 @@ std::string packageBambu(const A1Engine* e, const Project& P, const Plate& pl, c
     }
     zw.add(gname, g.gcode);
     zw.add(gname + ".md5", md5_hex(g.gcode), false);
-    std::string png = (!pl.thumb.empty() && z.has(pl.thumb)) ? z.read(pl.thumb) : fallbackPng;
+    // the app's picture of the plate as it is now; the project's own one may show an older arrangement
+    std::string png = !fallbackPng.empty() ? fallbackPng : ((!pl.thumb.empty() && z.has(pl.thumb)) ? z.read(pl.thumb) : "");
     if (!png.empty()) zw.add("Metadata/plate_" + pid + ".png", png, false);
-    std::string ms = z.has("Metadata/model_settings.config") ? z.read("Metadata/model_settings.config") : "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<config>\n</config>\n";
+    std::string ms = P.modelSettings();
     {
         std::string needle = "<metadata key=\"plater_id\" value=\"" + pid + "\"/>";
         size_t p = ms.find(needle);
@@ -537,6 +656,7 @@ char* a1_set_printer(A1Engine* e, const char* printerBundle) {
     std::string er;
     if (!loadPrinter(e, printerBundle, er)) return err(er);
     placePlates(e);
+    e->undo.clear();
     e->lastFile.clear();
     e->lastKind.clear();
     e->lastPlate = -1;
@@ -551,6 +671,7 @@ char* a1_open(A1Engine* e, const uint8_t* data, size_t len) {
         e->bytes.assign((const char*)data, len);
         e->proj = Project::load(e->bytes);
         placePlates(e);
+        e->undo.clear();
         e->lastPlate = -1;
         e->lastFile.clear();
         e->lastKind.clear();
@@ -594,11 +715,13 @@ int a1_get_transform(A1Engine* e, int oi, double* m) {
 }
 int a1_set_transform(A1Engine* e, int oi, const double* m) {
     if (!e->proj || oi < 0 || oi >= (int)e->proj->objects.size()) return -1;
+    pushUndo(e);
     for (int i = 0; i < 12; ++i) e->proj->objects[oi].item.m[i] = m[i];
     return 0;
 }
 int a1_rotate(A1Engine* e, int oi, int axis, double deg) {
     if (!e->proj || oi < 0 || oi >= (int)e->proj->objects.size()) return -1;
+    pushUndo(e);
     double R[9];
     axisAngle(axis == 0, axis == 1, axis == 2, deg * M_PI / 180.0, R);
     applyRotation(*e->proj, e->proj->objects[oi], R);
@@ -606,11 +729,13 @@ int a1_rotate(A1Engine* e, int oi, int axis, double deg) {
 }
 int a1_lay_flat(A1Engine* e, int oi, double nx, double ny, double nz) {
     if (!e->proj || oi < 0 || oi >= (int)e->proj->objects.size()) return -1;
+    pushUndo(e);
     rotateNormalDown(*e->proj, e->proj->objects[oi], nx, ny, nz);
     return 0;
 }
 int a1_auto_flat(A1Engine* e, int oi) {
     if (!e->proj || oi < 0 || oi >= (int)e->proj->objects.size()) return -1;
+    pushUndo(e);
     Object& o = e->proj->objects[oi];
     std::map<std::tuple<int, int, int>, std::pair<double, std::array<double, 3>>> buckets;
     for (auto& v : o.volumes)
@@ -636,12 +761,14 @@ int a1_auto_flat(A1Engine* e, int oi) {
 }
 int a1_reset_transform(A1Engine* e, int oi) {
     if (!e->proj || oi < 0 || oi >= (int)e->proj->objects.size()) return -1;
+    pushUndo(e);
     e->proj->objects[oi].item = e->proj->objects[oi].item0;
     return 0;
 }
 
 int a1_center_plate(A1Engine* e, int plate) {
     if (!e->proj || plate < 0 || plate >= (int)e->proj->plates.size()) return -1;
+    pushUndo(e);
     Project& P = *e->proj;
     const Plate& pl = P.plates[plate];
     double x0 = 1e18, y0 = 1e18, x1 = -1e18, y1 = -1e18;
@@ -838,11 +965,14 @@ int a1_export_project(A1Engine* e, uint8_t** data, size_t* len) {
     if (!e->proj) return -1;
     const ZipReader& z = *e->proj->zip;
     ZipWriter zw;
+    bool wroteSettings = false;
     for (auto& n : z.names()) {
         std::string d = z.read(n);
         if (n == "3D/3dmodel.model") d = replaceItemTransforms(d, *e->proj);
+        if (n == "Metadata/model_settings.config") { d = e->proj->modelSettings(); wroteSettings = true; }
         zw.add(n, d, n.size() < 4 || n.substr(n.size() - 4) != ".png");
     }
+    if (!wroteSettings && e->proj->platesEdited) zw.add("Metadata/model_settings.config", e->proj->modelSettings());
     std::string s = zw.finish();
     *data = dupStr(s);
     *len = s.size();
@@ -874,6 +1004,170 @@ int a1_layer_preview(A1Engine* e, int layer, float** segs, uint16_t** meta, size
     *segs = dupBuf(s);
     *meta = dupBuf(m);
     *count = m.size();
+    return 0;
+}
+
+// ---- placement edits (each one can be undone)
+
+int a1_move_object(A1Engine* e, int oi, double dx, double dy) {
+    if (!e->proj || oi < 0 || oi >= (int)e->proj->objects.size()) return -1;
+    pushUndo(e);
+    shiftObject(e->proj->objects[oi], dx, dy);
+    return 0;
+}
+
+int a1_place_object(A1Engine* e, int oi, double x, double y) {
+    if (!e->proj || oi < 0 || oi >= (int)e->proj->objects.size()) return -1;
+    pushUndo(e);
+    Object& o = e->proj->objects[oi];
+    Box f = footprint(*e->proj, o);
+    shiftObject(o, x - (f.x0 + f.x1) / 2, y - (f.y0 + f.y1) / 2);
+    return 0;
+}
+
+char* a1_arrange(A1Engine* e, int plate, const char* optsJson) {
+    if (!e->proj) return err("No project open.");
+    Project& P = *e->proj;
+    if (plate < 0 || plate >= (int)P.plates.size()) return err("No such plate.");
+    json o = parseOpts(optsJson);
+    double gap = o.value("spacing", kArrangeGap);
+    bool rotate = o.value("allow_rotation", false);
+    Bed b = bedOf(e->printer);
+    pushUndo(e);
+    // biggest footprints first
+    std::vector<int> order = P.plates[plate].objects;
+    std::vector<double> area(P.objects.size(), 0);
+    for (int oi : order) { Box f = footprint(P, P.objects[oi]); area[oi] = f.w() * f.d(); }
+    std::stable_sort(order.begin(), order.end(), [&](int a, int c) { return area[a] > area[c]; });
+    std::vector<Box> taken;
+    if (b.hasEx()) taken.push_back({b.ex0, b.ey0, b.ex1, b.ey1});
+    std::vector<int> placed, left;
+    for (int oi : order) {
+        Object& ob = P.objects[oi];
+        Box f = footprint(P, ob);
+        double x = 0, y = 0;
+        bool ok = findSpot(b, kBedMargin, gap, f.w(), f.d(), taken, x, y);
+        if (rotate) {
+            double x2 = 0, y2 = 0;
+            bool ok2 = findSpot(b, kBedMargin, gap, f.d(), f.w(), taken, x2, y2);
+            if (ok2 && (!ok || y2 < y - 1e-6 || (std::fabs(y2 - y) < 1e-6 && x2 < x - 1e-6))) {
+                double R[9];
+                axisAngle(0, 0, 1, M_PI / 2, R);
+                applyRotation(P, ob, R);
+                f = footprint(P, ob);
+                x = x2;
+                y = y2;
+                ok = true;
+            }
+        }
+        if (!ok) { left.push_back(oi); continue; }
+        shiftObject(ob, x - f.x0, y - f.y0);
+        taken.push_back(footprint(P, ob));
+        placed.push_back(oi);
+    }
+    // centre the packed group on the bed, as far as the no-print corner allows
+    if (!placed.empty()) {
+        Box g{1e18, 1e18, -1e18, -1e18};
+        for (int oi : placed) {
+            Box f = footprint(P, P.objects[oi]);
+            g.x0 = std::min(g.x0, f.x0); g.y0 = std::min(g.y0, f.y0);
+            g.x1 = std::max(g.x1, f.x1); g.y1 = std::max(g.y1, f.y1);
+        }
+        double dx = (b.x0 + b.x1) / 2 - (g.x0 + g.x1) / 2, dy = (b.y0 + b.y1) / 2 - (g.y0 + g.y1) / 2;
+        auto clear = [&](double sx, double sy) {
+            for (int oi : placed) {
+                Box f = footprint(P, P.objects[oi]);
+                Box m{f.x0 + sx, f.y0 + sy, f.x1 + sx, f.y1 + sy};
+                if (!insideBed(m, b, kBedMargin)) return false;
+                if (b.hasEx() && tooClose(m, Box{b.ex0, b.ey0, b.ex1, b.ey1}, gap)) return false;
+            }
+            return true;
+        };
+        double sx = 0, sy = 0;
+        if (clear(dx, dy)) { sx = dx; sy = dy; }
+        else if (clear(dx, 0)) sx = dx;
+        else if (clear(0, dy)) sy = dy;
+        for (int oi : placed) shiftObject(P.objects[oi], sx, sy);
+    }
+    // what didn't fit waits to the right of the bed (it shows as not fitting until it's moved to another plate)
+    double nextX = b.x1 + 15;
+    json names = json::array();
+    for (int oi : left) {
+        Box f = footprint(P, P.objects[oi]);
+        shiftObject(P.objects[oi], nextX - f.x0, b.y0 + kBedMargin - f.y0);
+        nextX += f.w() + gap;
+        names.push_back(P.objects[oi].name);
+    }
+    return dupJson(json{{"ok", true}, {"placed", placed.size()}, {"left_over", names}, {"project", projectInfo(e)}});
+}
+
+char* a1_move_to_plate(A1Engine* e, int oi, int target) {
+    if (!e->proj) return err("No project open.");
+    Project& P = *e->proj;
+    if (oi < 0 || oi >= (int)P.objects.size()) return err("No such object.");
+    if (target < -1 || target > (int)P.plates.size()) return err("No such plate.");
+    if (target == P.objects[oi].plate) return dupJson(json{{"ok", true}, {"plate", target}, {"project", projectInfo(e)}});
+    pushUndo(e);
+    if (target < 0 || target == (int)P.plates.size()) target = addPlate(P);
+    Object& o = P.objects[oi];
+    int from = o.plate;
+    Plate& a = P.plates[from];
+    Plate& b = P.plates[target];
+    // the same spot on the other plate's bed
+    carryObject(o, b.ox - a.ox, b.oy - a.oy);
+    a.objects.erase(std::remove(a.objects.begin(), a.objects.end(), oi), a.objects.end());
+    b.objects.push_back(oi);
+    o.plate = target;
+    a.thumb.clear();
+    b.thumb.clear();
+    P.platesEdited = true;
+    // something already there: the front-left-most free spot instead
+    Bed bed = bedOf(e->printer);
+    std::vector<Box> others = obstacles(P, bed, target, oi);
+    Box f = footprint(P, o);
+    if (!spotFree(f, bed, 0, kArrangeGap, others)) {
+        double x = 0, y = 0;
+        if (findSpot(bed, kBedMargin, kArrangeGap, f.w(), f.d(), others, x, y)) shiftObject(o, x - f.x0, y - f.y0);
+    }
+    return dupJson(json{{"ok", true}, {"plate", target}, {"project", projectInfo(e)}});
+}
+
+int a1_add_plate(A1Engine* e) {
+    if (!e->proj) return -1;
+    pushUndo(e);
+    return addPlate(*e->proj);
+}
+
+int a1_remove_plate(A1Engine* e, int plate) {
+    if (!e->proj) return -1;
+    Project& P = *e->proj;
+    if (plate < 0 || plate >= (int)P.plates.size() || P.plates.size() < 2 || !P.plates[plate].objects.empty()) return -1;
+    pushUndo(e);
+    P.plates.erase(P.plates.begin() + plate);
+    for (auto& o : P.objects)
+        if (o.plate > plate) o.plate--;
+    for (size_t i = 0; i < P.plates.size(); ++i) {
+        Plate& pl = P.plates[i];
+        pl.id = (int)i + 1;
+        if (!pl.named) pl.name = "Plate " + std::to_string(pl.id);
+    }
+    P.platesEdited = true;
+    P.layoutPlates();
+    return 0;
+}
+
+int a1_undo(A1Engine* e) {
+    if (!e->proj || e->undo.empty()) return -1;
+    Placement s = std::move(e->undo.back());
+    e->undo.pop_back();
+    Project& P = *e->proj;
+    P.plates = std::move(s.plates);
+    for (size_t i = 0; i < P.objects.size() && i < s.objects.size(); ++i) {
+        P.objects[i].item = std::get<0>(s.objects[i]);
+        P.objects[i].item0 = std::get<1>(s.objects[i]);
+        P.objects[i].plate = std::get<2>(s.objects[i]);
+    }
+    P.platesEdited = s.platesEdited;
     return 0;
 }
 

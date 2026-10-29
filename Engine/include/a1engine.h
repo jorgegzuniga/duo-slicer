@@ -43,6 +43,23 @@ int a1_reset_transform(A1Engine* e, int objectIndex);
 // Move every object on a plate so the group sits in the middle of the target printer's bed.
 int a1_center_plate(A1Engine* e, int plate);
 
+// Placement edits; each can be undone with a1_undo (the last 40).
+// Move an object by (dx, dy) mm, or put the middle of its footprint at (x, y) on the printer's bed.
+int a1_move_object(A1Engine* e, int objectIndex, double dx, double dy);
+int a1_place_object(A1Engine* e, int objectIndex, double x, double y);
+// Pack a plate's objects front-left first and centre the group, clear of the no-print corner.
+// Options {"spacing": mm (6), "allow_rotation": false}. Returns {"ok":true,"placed":n,"left_over":[names],"project":{...}}.
+char* a1_arrange(A1Engine* e, int plate, const char* optionsJson);
+// Move an object to another plate (plate -1 or the plate count makes a new plate), keeping its spot on the bed when free.
+// Returns {"ok":true,"plate":index,"project":{...}}.
+char* a1_move_to_plate(A1Engine* e, int objectIndex, int plate);
+// A new empty plate (returns its index), or remove an empty one (0 on success). Plates are laid out again in
+// Bambu Studio's grid so the exported 3MF opens with every object on its plate.
+int a1_add_plate(A1Engine* e);
+int a1_remove_plate(A1Engine* e, int plate);
+// Undo the last placement edit (rotation, move, arrange, plate change). Returns -1 when there's nothing to undo.
+int a1_undo(A1Engine* e);
+
 // Triangles of a plate in printer coordinates: xyz (9 floats per triangle), fil (1 byte per triangle, 1-based filament),
 // obj (int32 object index per triangle). Free each buffer with a1_free.
 int a1_plate_mesh(A1Engine* e, int plate, float** xyz, uint8_t** fil, int32_t** obj, size_t* triCount);

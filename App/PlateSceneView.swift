@@ -4,6 +4,7 @@ import SwiftUI
 /// SCNView that reports size changes (the camera's field of view follows the pane's shape).
 final class PlateSCNView: SCNView {
     var onResize: ((CGSize) -> Void)?
+    var onWindow: (() -> Void)?
     private var lastSize = CGSize.zero
 
     override func layoutSubviews() {
@@ -12,6 +13,11 @@ final class PlateSCNView: SCNView {
             lastSize = bounds.size
             onResize?(bounds.size)
         }
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        onWindow?()
     }
 }
 
@@ -25,6 +31,8 @@ struct PlateSceneView: UIViewRepresentable {
     var pickFace: Bool
     var onSelect: (Int?) -> Void
     var onFace: (Int, SIMD3<Double>) -> Void
+    /// The selected object was dragged by (dx, dy) mm on the bed.
+    var onMove: (Int, Double, Double) -> Void = { _, _, _ in }
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -40,7 +48,15 @@ struct PlateSceneView: UIViewRepresentable {
         v.defaultCameraController.inertiaEnabled = true
         let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.tapped(_:)))
         v.addGestureRecognizer(tap)
+        // one finger on the selected object drags it across the bed; anywhere else orbits the camera
+        let drag = UIPanGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.dragged(_:)))
+        drag.maximumNumberOfTouches = 1
+        drag.delegate = context.coordinator
+        v.addGestureRecognizer(drag)
+        context.coordinator.drag = drag
+        v.onWindow = { [weak coord = context.coordinator] in coord?.yieldCameraPans() }
         context.coordinator.view = v
+        context.coordinator.yieldCameraPans()
         context.coordinator.buildStatic()
         context.coordinator.buildBed(bed)
         return v
@@ -63,9 +79,14 @@ struct PlateSceneView: UIViewRepresentable {
         c.applySelection()
     }
 
-    final class Coordinator: NSObject {
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
         var parent: PlateSceneView
         weak var view: SCNView?
+        weak var drag: UIPanGestureRecognizer?
+        private var dragNodes: [SCNNode] = []
+        private var dragStarts: [SCNVector3] = []
+        private var dragFrom: SIMD3<Float>?
+        private var dragHeight: Float = 0
         var revision = -1
         var colors: [String] = []
         var bed: PrinterModel.Bed?
@@ -207,6 +228,73 @@ struct PlateSceneView: UIViewRepresentable {
             for (obj, mats) in materials {
                 for m in mats { m.emission.contents = obj == parent.selected ? UIColor(red: 0.05, green: 0.3, blue: 0.3, alpha: 1) : UIColor.black }
             }
+        }
+
+        /// SceneKit's camera pans wait for the object drag to decline the touch.
+        func yieldCameraPans() {
+            guard let v = view, let drag else { return }
+            for g in v.gestureRecognizers ?? [] where g !== drag && g is UIPanGestureRecognizer {
+                g.require(toFail: drag)
+            }
+        }
+
+        private func objectAt(_ p: CGPoint) -> (Int, SCNHitTestResult)? {
+            guard let v = view else { return nil }
+            let hits = v.hitTest(p, options: [SCNHitTestOption.searchMode: SCNHitTestSearchMode.closest.rawValue])
+            guard let hit = hits.first(where: { ($0.node.name ?? "").hasPrefix("obj-") }),
+                  let name = hit.node.name, let obj = Int(name.dropFirst(4)) else { return nil }
+            return (obj, hit)
+        }
+
+        func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
+            guard g === drag, let v = view, let sel = parent.selected, !parent.pickFace,
+                  let found = objectAt(g.location(in: v)), found.0 == sel else { return false }
+            dragHeight = found.1.worldCoordinates.y
+            return true
+        }
+
+        /// Where a screen point lands on the horizontal plane at the grabbed height (scene coordinates).
+        private func planePoint(_ p: CGPoint) -> SIMD3<Float>? {
+            guard let v = view else { return nil }
+            let near = v.unprojectPoint(SCNVector3(Float(p.x), Float(p.y), 0))
+            let far = v.unprojectPoint(SCNVector3(Float(p.x), Float(p.y), 1))
+            let a = SIMD3<Float>(near.x, near.y, near.z), b = SIMD3<Float>(far.x, far.y, far.z)
+            let dir = b - a
+            guard abs(dir.y) > 1e-6 else { return nil }
+            let t = (dragHeight - a.y) / dir.y
+            guard t > 0 else { return nil }
+            return a + dir * t
+        }
+
+        @objc func dragged(_ g: UIPanGestureRecognizer) {
+            guard let v = view, let obj = parent.selected else { return }
+            let p = g.location(in: v)
+            switch g.state {
+            case .began:
+                dragFrom = planePoint(p)
+                dragNodes = modelNode.childNodes.filter { $0.name == "obj-\(obj)" }
+                dragStarts = dragNodes.map(\.position)
+            case .changed:
+                guard let from = dragFrom, let to = planePoint(p) else { return }
+                let d = to - from
+                for (n, s) in zip(dragNodes, dragStarts) { n.position = SCNVector3(s.x + d.x, s.y, s.z + d.z) }
+            case .ended:
+                guard let from = dragFrom, let to = planePoint(p) else { restoreDrag(); return }
+                let d = to - from
+                dragFrom = nil
+                // scene (x, -z) is the printer's (x, y); the nodes stay where they are until the new mesh arrives
+                if abs(d.x) > 0.05 || abs(d.z) > 0.05 {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    parent.onMove(obj, Double(d.x), Double(-d.z))
+                }
+            default:
+                restoreDrag()
+            }
+        }
+
+        private func restoreDrag() {
+            for (n, s) in zip(dragNodes, dragStarts) { n.position = s }
+            dragFrom = nil
         }
 
         @objc func tapped(_ g: UITapGestureRecognizer) {

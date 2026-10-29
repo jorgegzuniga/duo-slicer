@@ -36,19 +36,23 @@ struct Object {
     std::string id;
     std::string name;
     Mat item;       // current placement (world coords of the project)
-    Mat item0;      // as loaded
+    Mat item0;      // as loaded, relative to its current plate (Reset goes back here)
+    Mat itemFile;   // exactly as in the file (export rewrites items that differ)
     std::vector<Volume> volumes;
     std::map<std::string, std::string> overrides;  // per-object settings (e.g. sparse_infill_density)
     int plate = 0;  // index into plates
+    std::string instanceId = "0", identifyId;  // its <model_instance> in model_settings.config
 };
 
 struct Plate {
     int id = 1;
     std::string name;
-    std::string thumb;  // zip path
+    bool named = false;  // plater_name came from the file (otherwise "Plate <id>")
+    std::string thumb;   // zip path; cleared when the plate's objects change
     double ox = 0, oy = 0;    // world -> target printer bed offset (changes with the target printer)
-    double ox0 = 0, oy0 = 0;  // world -> project bed offset (as laid out in the file)
+    double ox0 = 0, oy0 = 0;  // world -> project bed offset (where the plate sits in the project's grid)
     std::vector<int> objects;  // indices into objects
+    std::vector<std::pair<std::string, std::string>> meta;  // the plate's own metadata in model_settings.config
 };
 
 struct Project {
@@ -60,6 +64,13 @@ struct Project {
     std::string printerModel;
     double bedX0 = 0, bedY0 = 0, bedW = 256, bedD = 256;  // project printer's printable area
     bool hasBed = false;                                // printable_area came from the file
+    bool platesEdited = false;                          // objects moved between plates, or plates added/removed
+
+    // Bambu Studio's plate grid: ceil(sqrt(n)) columns, 1.2 bed sizes apart, rows towards -Y.
+    // Moves each plate (and its objects) to its grid spot for the current plate count.
+    void layoutPlates();
+    // model_settings.config with the current plate assignments (the file's own when nothing changed).
+    std::string modelSettings() const;
 
     static std::unique_ptr<Project> load(const std::string& bytes);
     // Triangles of every volume on a plate in plate-local (printer) coordinates.

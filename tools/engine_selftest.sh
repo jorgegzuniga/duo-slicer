@@ -48,6 +48,12 @@ print(out)
 assert 'problems 0' in out, out
 PY
 
+# placement edits: place, arrange, move between plates, new and removed plates, undo, export and reopen
+SRC=$(ls Engine/src/*.cpp | grep -v '/net.cpp$')
+c++ -O1 -std=c++17 -Wall -Wno-sign-compare -IEngine/third_party -IEngine/src -IEngine/include tools/t_place.cpp $SRC Engine/third_party/clipper2/*.cpp -lz -o "$T/t_place"
+"$T/t_place" Resources/profiles/bambu-x1c.json Resources/demo.3mf
+"$T/t_place" Resources/profiles/bambu-a1-mini.json Resources/demo.3mf
+
 # every printer bundle
 python3 tools/validate_printers.py ./a1cli "$T/tile.3mf"
 echo "engine self-test passed"
