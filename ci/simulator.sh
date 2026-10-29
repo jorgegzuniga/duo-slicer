@@ -68,12 +68,20 @@ shot() {  # label udid name -- launch args...
   { echo "$label-$name: $(ps -Ao pcpu=,rss=,command= | grep -i "Duo Slicer.app/Duo Slicer" | grep -v grep | awk '{print $1 "% cpu, " int($2/1024) " MB"}' | xargs)"; } >> shots/app-cpu.txt 2>&1
   if [ -n "${DISPLAYS:-}" ]; then  # devices with more than one screen (the iPhone Duo)
     for d in $DISPLAYS; do
-      limit 45 xcrun simctl io "$udid" screenshot --display="$d" "shots/$label-$name-screen$d.png" >> shots/simctl-errors.txt 2>&1 && echo "shot $label-$name (screen $d)"
+      snap "$udid" "shots/$label-$name-screen$d.png" --display="$d" && echo "shot $label-$name (screen $d)"
     done
-  elif limit 45 xcrun simctl io "$udid" screenshot "shots/$label-$name.png" >> shots/simctl-errors.txt 2>&1; then
+  elif snap "$udid" "shots/$label-$name.png"; then
     echo "shot $label-$name"
   fi
   return 0
+}
+
+snap() {  # udid file [--display=N]: a screenshot, tried twice (the simulator's capture sometimes stalls)
+  local udid=$1 file=$2
+  shift 2
+  limit 45 xcrun simctl io "$udid" screenshot "$@" "$file" >> shots/simctl-errors.txt 2>&1 && return 0
+  sleep 5
+  limit 45 xcrun simctl io "$udid" screenshot "$@" "$file" >> shots/simctl-errors.txt 2>&1
 }
 
 case "${1:-screenshots}" in
