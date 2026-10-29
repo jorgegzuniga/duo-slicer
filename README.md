@@ -18,6 +18,7 @@ The dual-nozzle Bambu printers (H2D, H2D Pro, H2C, X2D) aren't supported yet. Se
 - **Settings**: each printer's own quality presets, build plate, walls, top/bottom layers, infill, brim, skirt; filament preset and colour per slot. On the U1, which head prints each colour, matched to the filament loaded in each head.
 - **Slices on the phone** with its own engine (C++, Clipper2) and each printer's official start, filament-change and end G-code from the Bambu Studio and OrcaSlicer profiles.
 - **Layer preview**, print time, grams per colour, colour changes.
+- **Finds printers on your Wi-Fi**: tap yours; a Bambu printer needs only its access code, a U1 nothing.
 - **Prints over LAN** with live progress, pause, resume and stop.
 
 ## iPhone Duo
@@ -52,11 +53,15 @@ Anyone with the connector URL can use these tools while the app is open, so keep
 - Painted multi-colour regions inside a single part use that part's dominant colour.
 - Prints one layer at a time across all parts (no by-object sequence).
 
-## One-time printer setup
+## Adding a printer
 
-**Bambu Lab**: update the firmware, insert a microSD card (network jobs are stored on it), turn on **LAN-only Mode** and restart, then turn on **Developer Mode**. In the app, add the printer's IP address, serial number and access code (shown under LAN-only Mode). While LAN-only Mode is on, Bambu Handy and cloud printing don't work for that printer.
+Put the printer on the same Wi-Fi as the iPhone and tap **Add printer**: Duo Slicer searches the network and lists the Bambu Lab printers and Snapmaker U1s it finds (Bambu printers by their serial number, which also tells the model; the U1 by its Moonraker service). If a Bambu printer later gets a new address from the router, the next search updates it. You can still type an IP address instead.
 
-**Snapmaker U1**: connect it to the same Wi-Fi, then add its IP address in the app (Moonraker, port 7125). Load filament in each head so colours can be matched.
+**Bambu Lab**: tap the printer and type the access code from its screen (Settings, network/WLAN page). The app signs in once to check the code and to confirm the model. Before that, on the printer: update the firmware, insert a microSD card (network jobs are stored on it), turn on **LAN-only Mode** and restart, then turn on **Developer Mode**. While LAN-only Mode is on, Bambu Handy and cloud printing don't work for that printer.
+
+**Snapmaker U1**: tap it; nothing else to enter (Moonraker on port 7125, no API key unless you set one). Load filament in each head so colours can be matched.
+
+The search tries every address on the Wi-Fi network (your /24 on bigger networks) instead of listening for the printers' broadcasts, which iOS only allows for apps with Apple's multicast entitlement. iOS asks once for Local Network access.
 
 ## Building and TestFlight
 

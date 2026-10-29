@@ -112,6 +112,7 @@ struct HomeView: View {
     @EnvironmentObject var claude: ClaudeBridge
     @State private var importing = false
     @State private var showPrinters = false
+    @State private var showAddPrinter = false
     @State private var showClaude = false
     @State private var fold: CGRect?
 
@@ -149,7 +150,9 @@ struct HomeView: View {
                 if case .success(let url) = result { Task { await model.open(url: url) } }
             }
             .sheet(isPresented: $showPrinters) { PrintersView() }
+            .sheet(isPresented: $showAddPrinter) { AddPrinterView() }
             .sheet(isPresented: $showClaude) { ClaudeSettingsView() }
+            .onAppear { if UserDefaults.standard.bool(forKey: "DuoDemoAddPrinter") { showAddPrinter = true } }
         }
     }
 
@@ -191,7 +194,8 @@ struct HomeView: View {
     @ViewBuilder var deviceSections: some View {
         Section {
             Button {
-                showPrinters = true
+                // no printer yet: go straight to finding one on the Wi-Fi
+                if printer.printers.isEmpty { showAddPrinter = true } else { showPrinters = true }
             } label: {
                 PrinterStatusRow()
             }
@@ -238,7 +242,7 @@ struct PrinterStatusRow: View {
     }
 
     var statusLine: String {
-        guard printer.isConfigured else { return "Bambu Lab A1, P1, X1, H2S and more, or the Snapmaker U1" }
+        guard printer.isConfigured else { return "Find your Bambu Lab printer or Snapmaker U1 on this Wi-Fi" }
         guard printer.connected else { return printer.statusText }
         switch printer.state {
         case "RUNNING": return "Printing \(printer.percent)% · \(formatDuration(Double(printer.remainingMinutes) * 60)) left"

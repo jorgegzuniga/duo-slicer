@@ -304,7 +304,7 @@ struct PrintersView: View {
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
             }
             .sheet(item: $editing) { p in PrinterEditor(printer: p) }
-            .sheet(isPresented: $adding) { PrinterEditor(printer: nil) }
+            .sheet(isPresented: $adding) { AddPrinterView() }
         }
     }
 }

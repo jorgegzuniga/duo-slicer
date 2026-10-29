@@ -232,6 +232,20 @@ final class PrinterLink: ObservableObject {
 
     private func persist() { PrinterStore.save(printers, active: activeID) }
 
+    /// The saved printer a found one is (same serial number, or same address).
+    func saved(matching f: FoundPrinter) -> SavedPrinter? {
+        printers.first { (!f.serial.isEmpty && $0.serial == f.serial) || $0.hostOnly == f.host }
+    }
+
+    /// A saved Bambu printer turned up at a new address (the router handed out another one): follow it.
+    func follow(_ f: FoundPrinter) {
+        guard !f.serial.isEmpty,
+              let i = printers.firstIndex(where: { $0.serial == f.serial && $0.hostOnly != f.host }) else { return }
+        printers[i].host = f.host
+        persist()
+        if printers[i].id == activeID { reconnect() }
+    }
+
     // MARK: connection
 
     func start() {

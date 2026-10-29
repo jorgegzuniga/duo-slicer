@@ -44,7 +44,7 @@ targets:
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
         UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
-        NSLocalNetworkUsageDescription: Duo Slicer connects to your Bambu Lab or Snapmaker printer on your Wi-Fi to send prints and show their progress.
+        NSLocalNetworkUsageDescription: Duo Slicer finds your Bambu Lab or Snapmaker printer on your Wi-Fi, sends prints to it and shows their progress.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
         DuoRelayURL: $(DUO_RELAY_URL)

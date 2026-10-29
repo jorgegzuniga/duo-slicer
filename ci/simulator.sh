@@ -4,6 +4,7 @@
 #   ci/simulator.sh claude        relay (wrangler dev) + the app: Claude's tools end to end -> shots/claude-*
 #   ci/simulator.sh inner         the iPhone Duo's unfolded layouts at the inner screen's size, on a 13-inch iPad -> shots/duo-inner-*
 #   ci/simulator.sh unfold        try to unfold the iPhone Duo simulator through Device Hub and shoot its inner screen
+#   ci/simulator.sh discover      Add printer's Wi-Fi search against stand-in printers on the runner -> shots/discover-*
 set -u
 APP="build/dd/Build/Products/Debug-iphonesimulator/Duo Slicer.app"
 BUNDLE=Com.jorgegzuniga.duoslicer
@@ -206,6 +207,32 @@ unfold)
   ishot home -DuoDemo YES -DuoDemoHome YES -DuoDemoPrinter bambu-x1c
   ishot rotated-plate -DuoDemo YES -DuoDemoPrinter bambu-x1c -DuoDemoPanel plate -DuoDemoOrientation portrait -DuoDemoShowFold YES
   screencapture -x shots/mac-3.png >> "$P" 2>&1
+  ;;
+discover)
+  # Add printer's Wi-Fi search, against stand-in printers on two extra addresses of the runner's network:
+  # a Bambu Lab P1S (TLS certificate named with its serial number) and a Snapmaker U1 (Moonraker)
+  P=shots/discover.txt
+  : > "$P"
+  ip=$(ipconfig getifaddr en0)
+  echo "runner en0 $ip mask $(ipconfig getoption en0 subnet_mask)" >> "$P"
+  [ -z "$ip" ] && { echo "no address on en0" >> "$P"; exit 0; }
+  base=${ip%.*}
+  a=$base.250
+  b=$base.251
+  [ "$ip" = "$a" ] && a=$base.252
+  [ "$ip" = "$b" ] && b=$base.253
+  sudo ifconfig en0 alias "$a" 255.255.255.255 >> "$P" 2>&1
+  sudo ifconfig en0 alias "$b" 255.255.255.255 >> "$P" 2>&1
+  python3 ci/fake_printers.py "$a" "$b" > shots/fake-printers.txt 2>&1 &
+  sleep 5
+  { echo "stand-ins: P1S at $a, U1 at $b"; curl -s -m 3 "http://$b:7125/printer/objects/list"; echo; } >> "$P" 2>&1
+  udid=$(pick "^iPhone Duo$")
+  [ -z "$udid" ] && udid=$(pick "^iPhone 1[0-9] Pro$")
+  boot "$udid"
+  limit 60 xcrun simctl io "$udid" enumerate > shots/duo-screens.txt 2>&1 || true
+  DISPLAYS=$(screens shots/duo-screens.txt | awk '{print $1}' | xargs)
+  WAIT=45 shot discover "$udid" add-printer -DuoDemo YES -DuoDemoHome YES -DuoDemoAddPrinter YES
+  grep -c "from" shots/fake-printers.txt >> "$P" 2>&1 || true
   ;;
 claude)
   (cd relay && npm ci --no-audit --no-fund > /dev/null 2>&1 && npx wrangler dev --port 8787 --ip 127.0.0.1 > ../shots/wrangler.log 2>&1) &

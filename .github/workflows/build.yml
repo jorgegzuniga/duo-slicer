@@ -77,6 +77,10 @@ jobs:
         continue-on-error: true
         timeout-minutes: 20
         run: ci/simulator.sh unfold
+      - name: Add printer finds printers on the network (stand-ins on the runner)
+        continue-on-error: true
+        timeout-minutes: 10
+        run: ci/simulator.sh discover
       - name: Publish the build errors to the ci-logs branch
         if: failure() && github.event_name == 'push'
         run: |
