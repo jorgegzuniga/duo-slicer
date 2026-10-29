@@ -7,22 +7,38 @@ on:
     paths: [".github/workflows/probe.yml"]
 
 jobs:
-  probe:
-    timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [xcode-27]
-    runs-on: ${{ matrix.os }}
+  sdk:
+    runs-on: xcode-27
+    timeout-minutes: 30
+    permissions:
+      contents: write
     steps:
-      - name: Xcodes and simulators
+      - uses: actions/checkout@v4
+      - name: iPhone Duo APIs in the iOS 27.1 SDK
         run: |
-          echo "::notice::${{ matrix.os }} macOS $(sw_vers -productVersion) $(uname -m)"
-          echo "::notice::Xcodes: $(ls -d /Applications/Xcode*.app | xargs -n1 basename | tr '\n' ' ')"
-          X=$(ls -d /Applications/Xcode_27*.app 2>/dev/null | sort -V | tail -1)
-          [ -n "$X" ] && sudo xcode-select -s "$X/Contents/Developer"
-          echo "::notice::Selected: $(xcodebuild -version | tr '\n' ' ')"
-          echo "::notice::SDKs: $(xcodebuild -showsdks 2>/dev/null | grep -o 'iphoneos[0-9.]*\|iphonesimulator[0-9.]*' | sort -u | tr '\n' ' ')"
-          echo "::notice::Runtimes: $(xcrun simctl list runtimes 2>/dev/null | grep -i ios | tr '\n' ';')"
-          echo "::notice::Duo devices: $(xcrun simctl list devicetypes 2>/dev/null | grep -i -E 'duo|fold' | tr '\n' ';')"
-          echo "::notice::iPhones: $(xcrun simctl list devices available 2>/dev/null | grep -E 'iPhone|iPad' | sed 's/(.*//' | sort -u | tr '\n' ';')"
+          sudo xcode-select -s /Applications/Xcode_27.1.app/Contents/Developer
+          xcodebuild -version
+          SDK=$(xcrun --sdk iphoneos --show-sdk-path)
+          echo "SDK $SDK" > duo-api.txt
+          for fw in SwiftUI UIKit; do
+            f=$(find "$SDK/System/Library/Frameworks/$fw.framework" -name "arm64e-apple-ios.swiftinterface" | head -1)
+            [ -z "$f" ] && f=$(find "$SDK/System/Library/Frameworks/$fw.framework" -name "*.swiftinterface" | head -1)
+            echo "===== $fw: $f" >> duo-api.txt
+            grep -n -B3 -A25 -E "ReservedRegion|reservedRegions|struct ArrangementView|func arrangementViewStyle|onHingeChange|struct DeviceHinge|HingeContext|toolbarVerticalBehavior|toolbarVerticalEdge" "$f" | head -1500 >> duo-api.txt || true
+          done
+          h=$(find "$SDK/System/Library/Frameworks/UIKit.framework" -name "UIView*.h" | xargs grep -l -i "reservedRegion" 2>/dev/null | head -3)
+          for x in $h; do echo "===== $x" >> duo-api.txt; grep -n -i -B2 -A12 "reservedRegion" "$x" | head -200 >> duo-api.txt; done
+          xcrun simctl list devicetypes | grep -i duo >> duo-api.txt
+          wc -l duo-api.txt
+      - name: Publish to ci-logs
+        run: |
+          cp duo-api.txt "$RUNNER_TEMP/"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -q --orphan ci-logs-publish
+          git rm -rfq .
+          git clean -fdxq
+          cp "$RUNNER_TEMP/duo-api.txt" .
+          git add duo-api.txt
+          git commit -qm "iPhone Duo API dump"
+          git push -fq origin HEAD:ci-logs
