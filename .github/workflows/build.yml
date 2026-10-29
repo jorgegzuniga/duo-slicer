@@ -45,6 +45,9 @@ jobs:
           sudo xcode-select -s "$X/Contents/Developer"
           echo "::notice::Using $X"
           xcodebuild -version
+      - name: Start the simulators early (the iPhone Duo's first boot is slow)
+        continue-on-error: true
+        run: ci/simulator.sh preboot
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Generate project

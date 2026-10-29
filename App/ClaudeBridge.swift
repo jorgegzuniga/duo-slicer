@@ -186,7 +186,8 @@ final class ClaudeBridge: ObservableObject {
         let args = params["arguments"] as? [String: Any] ?? [:]
         note("Claude: \(name.replacingOccurrences(of: "_", with: " "))")
         let result = await ClaudeTools(bridge: self, model: model, printer: printer).call(name, args)
-        send(["id": id, "result": result], on: t)
+        // long calls (slicing, approvals) can outlive a reconnect; the relay matches the answer by id on any connection
+        send(["id": id, "result": result], on: socket ?? t)
     }
 
     func note(_ line: String) {

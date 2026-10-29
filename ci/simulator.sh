@@ -37,9 +37,9 @@ print(best[1] if best else "")' "$1"
 boot() {
   local udid=$1
   limit 60 xcrun simctl boot "$udid" 2>/dev/null || true
-  limit 420 xcrun simctl bootstatus "$udid" -b > /dev/null 2>&1 || true
-  limit 30 xcrun simctl status_bar "$udid" override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3 2>/dev/null || true
-  limit 120 xcrun simctl install "$udid" "$APP"
+  limit 600 xcrun simctl bootstatus "$udid" -b > /dev/null 2>&1 || true
+  limit 60 xcrun simctl status_bar "$udid" override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3 2>/dev/null || true
+  limit 300 xcrun simctl install "$udid" "$APP"
 }
 
 shot() {  # label udid name -- launch args...
@@ -48,17 +48,24 @@ shot() {  # label udid name -- launch args...
   limit 30 xcrun simctl terminate "$udid" "$BUNDLE" 2>/dev/null || true
   limit 60 xcrun simctl launch "$udid" "$BUNDLE" "$@" > /dev/null 2>> shots/simctl-errors.txt || true
   sleep "${WAIT:-14}"
-  if limit 45 xcrun simctl io "$udid" screenshot "shots/$label-$name.png" >> shots/simctl-errors.txt 2>&1; then
-    echo "shot $label-$name"
-  else
-    for d in internal external; do
-      limit 45 xcrun simctl io "$udid" screenshot --display=$d "shots/$label-$name-$d.png" >> shots/simctl-errors.txt 2>&1 && echo "shot $label-$name ($d)"
+  if [ -n "${DISPLAYS:-}" ]; then  # devices with more than one screen (the iPhone Duo)
+    for d in $DISPLAYS; do
+      limit 45 xcrun simctl io "$udid" screenshot --display="$d" "shots/$label-$name-screen$d.png" >> shots/simctl-errors.txt 2>&1 && echo "shot $label-$name (screen $d)"
     done
+  elif limit 45 xcrun simctl io "$udid" screenshot "shots/$label-$name.png" >> shots/simctl-errors.txt 2>&1; then
+    echo "shot $label-$name"
   fi
   return 0
 }
 
 case "${1:-screenshots}" in
+preboot)  # start the slow first boots while the app builds
+  for spec in "^iPhone Duo$" "^iPad mini"; do
+    udid=$(pick "$spec")
+    [ -n "$udid" ] && { limit 120 xcrun simctl boot "$udid" > /dev/null 2>&1 || true; }
+  done
+  exit 0
+  ;;
 screenshots)
   { limit 30 xcrun simctl help; limit 30 xcrun simctl io help; xcrun simctl list devices available; } > shots/simctl-help.txt 2>&1 || true
   for spec in "duo:^iPhone Duo$" "iphone:^iPhone 1[0-9] Pro$" "ipad-mini:^iPad mini"; do
@@ -66,11 +73,25 @@ screenshots)
     udid=$(pick "${spec#*:}")
     if [ -z "$udid" ]; then echo "no simulator for $spec"; continue; fi
     boot "$udid" || continue
-    shot "$label" "$udid" home -DuoDemo YES -DuoDemoHome YES -DuoDemoPrinter bambu-x1c
+    DISPLAYS=""
+    if [ "$label" = duo ]; then
+      limit 60 xcrun simctl io "$udid" enumerate > shots/duo-screens.txt 2>&1 || true
+      DISPLAYS=$(grep -oE "Screen ID: *[0-9]+|screenID: *[0-9]+" shots/duo-screens.txt | grep -oE "[0-9]+" | sort -u | xargs)
+      [ -z "$DISPLAYS" ] && DISPLAYS="1 2"
+    fi
     shot "$label" "$udid" plate -DuoDemo YES -DuoDemoPrinter bambu-x1c -DuoDemoPanel plate
-    shot "$label" "$udid" preview -DuoDemo YES -DuoDemoPrinter bambu-x1c -DuoDemoSlice YES -DuoDemoPanel preview
     shot "$label" "$udid" u1-print -DuoDemo YES -DuoDemoPrinter snapmaker-u1 -DuoDemoSlice YES -DuoDemoPanel print
-    shot "$label" "$udid" settings -DuoDemo YES -DuoDemoPrinter snapmaker-u1 -DuoDemoPanel settings
+    if [ "$label" = duo ]; then  # the full set on the iPhone Duo
+      shot "$label" "$udid" home -DuoDemo YES -DuoDemoHome YES -DuoDemoPrinter bambu-x1c
+      shot "$label" "$udid" preview -DuoDemo YES -DuoDemoPrinter bambu-x1c -DuoDemoSlice YES -DuoDemoPanel preview
+      shot "$label" "$udid" settings -DuoDemo YES -DuoDemoPrinter snapmaker-u1 -DuoDemoPanel settings
+    fi
+    if [ "$label" = duo ]; then  # held tall: try the inner screen's other orientation
+      inner=$(echo $DISPLAYS | awk '{print $1}')
+      limit 30 xcrun simctl io "$udid" screenConfig --display="$inner" geometry 2007x2853 >> shots/simctl-errors.txt 2>&1 \
+        && shot "$label" "$udid" tall-plate -DuoDemo YES -DuoDemoPrinter bambu-x1c -DuoDemoPanel plate
+    fi
+    DISPLAYS=""
     limit 60 xcrun simctl shutdown "$udid" 2>/dev/null || true
   done
   ;;

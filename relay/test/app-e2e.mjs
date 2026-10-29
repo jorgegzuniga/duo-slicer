@@ -45,8 +45,14 @@ if (!ready) {
   process.exit(1);
 }
 
-let r = await call("get_project");
-let p = json(r);
+// the demo project opens a moment after the app connects
+let r, p;
+for (let i = 0; i < 30; i++) {
+  r = await call("get_project");
+  p = json(r);
+  if (p && p.project) break;
+  await new Promise((res) => setTimeout(res, 2000));
+}
 check("get_project", p && p.project === "Duo demo" && p.plates.length === 2, text(r).slice(0, 160));
 check("slicing for the U1", p && /U1/.test(p.slicing_for), p && p.slicing_for);
 
