@@ -1,0 +1,12 @@
+duo-plate: 5.4% cpu, 239 MB
+duo-u1-print: 0.3% cpu, 309 MB
+duo-home: 0.0% cpu, 235 MB
+duo-preview: 0.0% cpu, 295 MB
+duo-settings: 0.0% cpu, 277 MB
+discover-add-printer: 0.2% cpu, 261 MB
+fleet-printers: 1.0% cpu, 266 MB
+fleet-p1s: 3.4% cpu, 282 MB
+fleet-x1c: 7.0% cpu, 519 MB
+fleet-u1: 20.1% cpu, 280 MB
+fleet-queue-printing: 10.0% cpu, 331 MB
+fleet-print-panel: 5.7% cpu, 342 MB

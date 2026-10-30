@@ -1,0 +1,143 @@
+usage: simctl [--set <path>] [--profiles <path>] <subcommand> ...
+       simctl help [subcommand]
+Command line utility to control the Simulator
+
+For subcommands that require a <device> argument, you may specify a device UDID
+or the special "booted" string which will cause simctl to pick a booted device.
+If multiple devices are booted when the "booted" device is selected, simctl
+will choose one of them.
+
+Subcommands:
+	addmedia            Add photos, live photos, videos, or contacts to the library of a device.
+	appinfo             Show information about an installed application.
+	boot                Boot a device or device pair.
+	clone               Clone an existing device.
+	create              Create a new device.
+	delete              Delete specified devices, unavailable devices, or all devices.
+	diagnose            Collect diagnostic information and logs.
+	erase               Erase a device's contents and settings.
+	get_app_container   Print the path of the installed app's container
+	getenv              Print an environment variable from a running device.
+	help                Prints the usage for a given subcommand.
+	icloud_sync         Trigger iCloud sync on a device.
+	install             Install an app on a device.
+	install_app_data    Install an xcappdata package to a device, replacing the current contents of the container.
+	io                  Set up a device IO operation.
+	keychain            Manipulate a device's keychain
+	launch              Launch an application by identifier on a device.
+	list                List available devices, device types, runtimes, or device pairs.
+	listapps            Show the installed applications.
+	location            Control a device's simulated location
+	logverbose          enable or disable verbose logging for a device
+	openurl             Open a URL in a device.
+	pair                Create a new watch and phone pair.
+	pair_activate       Set a given pair as active.
+	pbcopy              Copy standard input onto the device pasteboard.
+	pbpaste             Print the contents of the device's pasteboard to standard output.
+	pbsync              Sync the pasteboard content from one pasteboard to another.
+	personalization     Provides utility when working with personalization manifests
+	privacy             Grant, revoke, or reset privacy and permissions
+	push                Send a simulated push notification
+	reboot              Reboot a device.
+	rename              Rename a device.
+	runtime             Perform operations on runtimes
+	shutdown            Shutdown a device.
+	spawn               Spawn a process by executing a given executable on a device.
+	status_bar          Set or clear status bar overrides
+	terminate           Terminate an application by identifier on a device.
+	ui                  Get or Set UI options
+	uninstall           Uninstall an app from a device.
+	unpair              Unpair a watch and phone pair.
+	upgrade             Upgrade a device to a newer runtime.
+Set up a device IO operation.
+Usage: simctl io <device> <operation> <arguments>
+
+Common arguments:
+	    --display    Specifies which display to record. Accepts:
+	                 - Screen ID (eg: "1") 
+	                 - Screen name (eg: "Internal-1")
+	                 - Screen device name (eg: "primary")
+	                 - Screen UUID (eg: "D5293DAA-4D8C-453E-B049-969FE81936A0")
+	                 - Port UUID (eg: "D5293DAA-4D8C-453E-B049-969FE81936A0"
+	                 - Alias (for compatibility): "internal" or "external"
+	                 If a value matches more than one screen, simctl prefers the powered one.
+	                 Use 'simctl io <device> enumerate' to list available screens and their IDs.
+
+	                 If a single default display cannot be determined, screenshot, recordVideo and
+	                 screenConfig will require --display to be passed in.
+
+Supported operations:
+	enumerate [--poll]
+	    Lists all available IO ports and descriptor states.
+	    --poll       Poll after enumeration.
+
+	poll
+	    Polls all available IO ports for events.
+
+	recordVideo [--codec=<codec>] [--display=<display>] [--mask=<policy>] [--force] <file or url>
+	    Records the display to a QuickTime movie at the specified file or url.
+	    --codec      Specifies the codec type: "h264" or "hevc". Default is "hevc".
+
+	    --mask       For non-rectangular displays, handle the mask by policy:
+	                 ignored: The mask is ignored and the unmasked framebuffer is saved.
+	                 alpha: Not supported, but retained for compatibility; the mask is rendered black.
+	                 black: The mask is rendered black.
+
+	    --force      Force the output file to be written to, even if the file already exists.
+
+	simctl writes 'Recording started' to stderr once the first video frame has been processed. Look for this
+	if you want to wait for the recording to start.
+	Send SIGINT (Control + C) to stop recording. simctl exits once the in-flight frames are processed
+	and the video file is finalized.
+
+	screenshot [--type=<type>] [--display=<display>] [--mask=<policy>] <file or url>
+	    Saves a screenshot as a PNG to the specified file or url(use "-" for stdout).
+	    --type       Can be "png", "tiff", "bmp", "gif", "jpeg". Default is png.
+
+	    --mask       For non-rectangular displays, handle the mask by policy:
+	                 ignored: The mask is ignored and the unmasked framebuffer is saved.
+	                 alpha: The mask is used as premultiplied alpha.
+	                 black: The mask is rendered black.
+
+	screenConfig [--display=<display>] <subcommand> [arguments]
+	    Manage device screen configuration.
+
+	    power <on|off>
+	        Set the power state of a screen.
+
+	    geometry <width>x<height>[@<scale>]
+	        Change the geometry of a screen.
+	        The width and height must be compatible with the screen's current mode.
+	        If @<scale> is specified, a mode with that scale factor will be selected.
+
+Example:
+	Save a screenshot of the booted device to screenshot.png:
+	simctl io booted screenshot screenshot.png
+
+
+== Devices ==
+-- iOS 27.0 --
+    iPhone 18 Pro (B6BCFC3D-3ADD-42C8-BB29-33FF8FE7E0B0) (Shutdown) 
+    iPhone 18 Pro Max (C6440860-3DBD-43F1-85B3-E0E2DBC9F273) (Shutdown) 
+    iPhone 17e (DC633337-915D-40C3-BF0C-542D81CDB234) (Shutdown) 
+    iPhone Air (4FC7BE80-48FB-4327-A4A4-EA8853F54DF7) (Shutdown) 
+    iPhone 17 (F82EF267-78B0-4334-8AE6-2C58E00EE70F) (Shutdown) 
+    iPad Pro 13-inch (M5) (3CE49892-DF52-49A7-9D5F-68E49A7DD048) (Shutdown) 
+    iPad Pro 11-inch (M5) (01C1B81A-61A7-4160-881F-5314F5879604) (Shutdown) 
+    iPad mini (A17 Pro) (6B6B5B63-AFE6-40DB-AE70-2270201FD1B7) (Shutdown) 
+    iPad Air 13-inch (M4) (3CB1B8C5-7AF0-49B1-9537-574E22060821) (Shutdown) 
+    iPad Air 11-inch (M4) (A8EA6D4B-9314-46C1-997D-2F444D0D740B) (Shutdown) 
+    iPad (A16) (9F79690F-C4FA-4AF3-AA7F-0F235E7E0F75) (Shutdown) 
+-- iOS 27.1 --
+    iPhone Duo (D0D80A96-1387-4502-BEFD-3CB0955AD02A) (Shutdown) 
+-- tvOS 27.0 --
+    Apple TV 4K (3rd generation) (D1C99F5E-D75C-4B6C-B177-AA5D47BFED75) (Shutdown) 
+    Apple TV 4K (3rd generation) (at 1080p) (FA9538FD-CC2B-4608-8B39-40224FBFAF4A) (Shutdown) 
+-- watchOS 27.0 --
+    Apple Watch Series 12 (46mm) (4DA5F4CB-FB8D-4FFF-8A66-E222F1B25593) (Shutdown) 
+    Apple Watch Series 12 (42mm) (6D41AACB-33F7-4F31-B952-4C668B3AA3EA) (Shutdown) 
+    Apple Watch Ultra 4 (49mm) (CF758108-3646-4617-8F13-274523054C36) (Shutdown) 
+    Apple Watch SE 3 (44mm) (906B089D-AFAC-4EA7-9B2F-67F4A10F2EB9) (Shutdown) 
+    Apple Watch SE 3 (40mm) (1C2926AF-98D4-4774-9D82-8C95212160C4) (Shutdown) 
+-- visionOS 27.0 --
+    Apple Vision Pro (0D3EA9C3-07F9-4F0E-9C03-36BA99E8C9F7) (Shutdown) 

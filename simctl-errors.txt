@@ -1,0 +1,53 @@
+timed out after 60s: xcrun simctl status_bar D0D80A96-1387-4502-BEFD-3CB0955AD02A override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3
+Detected file type from extension: PNG
+Wrote screenshot to: /Users/runner/work/duo-slicer/duo-slicer/shots/duo-plate-screen1.png
+Detected file type from extension: PNG
+Wrote screenshot to: /Users/runner/work/duo-slicer/duo-slicer/shots/duo-plate-screen3.png
+Detected file type from extension: PNG
+Wrote screenshot to: /Users/runner/work/duo-slicer/duo-slicer/shots/duo-u1-print-screen1.png
+Detected file type from extension: PNG
+Wrote screenshot to: /Users/runner/work/duo-slicer/duo-slicer/shots/duo-u1-print-screen3.png
+Detected file type from extension: PNG
+Wrote screenshot to: /Users/runner/work/duo-slicer/duo-slicer/shots/duo-home-screen1.png
+Detected file type from extension: PNG
+Wrote screenshot to: /Users/runner/work/duo-slicer/duo-slicer/shots/duo-home-screen3.png
+Detected file type from extension: PNG
+Wrote screenshot to: /Users/runner/work/duo-slicer/duo-slicer/shots/duo-preview-screen1.png
+Detected file type from extension: PNG
+Wrote screenshot to: /Users/runner/work/duo-slicer/duo-slicer/shots/duo-preview-screen3.png
+Detected file type from extension: PNG
+Wrote screenshot to: /Users/runner/work/duo-slicer/duo-slicer/shots/duo-settings-screen1.png
+Detected file type from extension: PNG
+Wrote screenshot to: /Users/runner/work/duo-slicer/duo-slicer/shots/duo-settings-screen3.png
+Detected file type from extension: PNG
+Wrote screenshot to: /Users/runner/work/duo-slicer/duo-slicer/shots/discover-add-printer-screen1.png
+Detected file type from extension: PNG
+Wrote screenshot to: /Users/runner/work/duo-slicer/duo-slicer/shots/discover-add-printer-screen3.png
+Detected file type from extension: PNG
+Wrote screenshot to: /Users/runner/work/duo-slicer/duo-slicer/shots/fleet-printers-screen1.png
+Detected file type from extension: PNG
+Wrote screenshot to: /Users/runner/work/duo-slicer/duo-slicer/shots/fleet-printers-screen3.png
+Detected file type from extension: PNG
+Wrote screenshot to: /Users/runner/work/duo-slicer/duo-slicer/shots/fleet-p1s-screen1.png
+Detected file type from extension: PNG
+Wrote screenshot to: /Users/runner/work/duo-slicer/duo-slicer/shots/fleet-p1s-screen3.png
+Detected file type from extension: PNG
+Wrote screenshot to: /Users/runner/work/duo-slicer/duo-slicer/shots/fleet-x1c-screen1.png
+Detected file type from extension: PNG
+Wrote screenshot to: /Users/runner/work/duo-slicer/duo-slicer/shots/fleet-x1c-screen3.png
+Detected file type from extension: PNG
+Wrote screenshot to: /Users/runner/work/duo-slicer/duo-slicer/shots/fleet-u1-screen1.png
+Detected file type from extension: PNG
+Wrote screenshot to: /Users/runner/work/duo-slicer/duo-slicer/shots/fleet-u1-screen3.png
+Detected file type from extension: PNG
+Wrote screenshot to: /Users/runner/work/duo-slicer/duo-slicer/shots/fleet-queue-printing-screen1.png
+Detected file type from extension: PNG
+Wrote screenshot to: /Users/runner/work/duo-slicer/duo-slicer/shots/fleet-queue-printing-screen3.png
+Detected file type from extension: PNG
+Wrote screenshot to: /Users/runner/work/duo-slicer/duo-slicer/shots/fleet-queue-done-screen1.png
+Detected file type from extension: PNG
+Wrote screenshot to: /Users/runner/work/duo-slicer/duo-slicer/shots/fleet-queue-done-screen3.png
+Detected file type from extension: PNG
+Wrote screenshot to: /Users/runner/work/duo-slicer/duo-slicer/shots/fleet-print-panel-screen1.png
+Detected file type from extension: PNG
+Wrote screenshot to: /Users/runner/work/duo-slicer/duo-slicer/shots/fleet-print-panel-screen3.png

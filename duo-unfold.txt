@@ -1,0 +1,37 @@
+outer screen 1, inner screen 3
+device app: /Applications/Xcode_27.1.app/Contents/Applications/DeviceHub.app
+== UI
+process: SimulatorTrampoline (com.apple.CoreSimulator.SimulatorTrampoline), windows: 0
+process: com.apple.CoreSimulator.CoreSimulatorService (com.apple.CoreSimulator.CoreSimulatorService), windows: 0
+process: DeviceHub (com.apple.dt.Devices), windows: 0
+menu:
+no posture menu item
+  inner screen: 106123 bytes
+control 0:
+no control #0 (0 look like posture controls)
+  inner screen: 106123 bytes
+control 1:
+no control #1 (0 look like posture controls)
+  inner screen: 106123 bytes
+control 2:
+no control #2 (0 look like posture controls)
+  inner screen: 106123 bytes
+click at 742 682:
+clicked at 742, 682
+  inner screen: 6358377 bytes
+unfolded (click at 742 682)
+Detected file type from extension: PNG
+Wrote screenshot to: /Users/runner/work/duo-slicer/duo-slicer/shots/duo-unfolded-plate.png
+shot inner plate
+Detected file type from extension: PNG
+Wrote screenshot to: /Users/runner/work/duo-slicer/duo-slicer/shots/duo-unfolded-preview.png
+shot inner preview
+Detected file type from extension: PNG
+Wrote screenshot to: /Users/runner/work/duo-slicer/duo-slicer/shots/duo-unfolded-u1-print.png
+shot inner u1-print
+Detected file type from extension: PNG
+Wrote screenshot to: /Users/runner/work/duo-slicer/duo-slicer/shots/duo-unfolded-home.png
+shot inner home
+Detected file type from extension: PNG
+Wrote screenshot to: /Users/runner/work/duo-slicer/duo-slicer/shots/duo-unfolded-rotated-plate.png
+shot inner rotated-plate

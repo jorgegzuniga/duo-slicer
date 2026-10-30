@@ -1,0 +1,6 @@
+stand-ins: P1S at 127.0.0.2, U1 at 127.0.0.3
+{"result": {"objects": ["webhooks", "print_stats", "toolhead", "extruder", "extruder1", "extruder2", "extruder3", "heater_bed", "print_task_config", "virtual_sdcard", "display_status"]}}
+== runner network
+	inet 192.168.64.8 netmask 0xffffff00 broadcast 192.168.64.255
+Firewall is disabled. (State = 0)
+connections the stand-ins saw: 4

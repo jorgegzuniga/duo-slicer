@@ -1,0 +1,238 @@
+ok   app connected to the relay
+ok   get_project — {
+  "current_plate" : 1,
+  "designed_for" : "Bambu Lab A1",
+  "filaments" : [
+    {
+      "color" : "#F2F2F2",
+      "filament" : 1,
+      "preset" : "Snapmaker
+ok   slicing for the U1 — Snapmaker U1
+ok   list_presets
+ok   set_settings — {
+  "changed" : [
+    "wall_loops = 3",
+    "sparse_infill_density = 25%"
+  ],
+  "note" : "Slice again to apply.",
+  "settings" : {
+    "bottom_shell_layers" : "3",
+    "brim_type" : "",
+    "changed_
+ok   set_toolheads — {
+  "note" : "Slice again to apply.",
+  "toolheads" : [
+    {
+      "filament" : 1,
+      "head" : 1
+    },
+    {
+      "filament" : 2,
+      "head" : 4
+    },
+    {
+      "filament" : 3,
+      "head"
+ok   rotate_object — {
+  "fits" : true,
+  "name" : "Coaster",
+  "object" : 0,
+  "size_mm" : [
+    90,
+    90,
+    3.2000000000000002
+  ]
+}
+ok   slice_plate — {
+  "bed" : "High Temp Plate",
+  "color_changes" : 9,
+  "filaments" : [
+    {
+      "color" : "#F2F2F2",
+      "filament" : 1,
+      "grams" : 14.300000000000001,
+      "head" : 1,
+      "preset" : "Snapmaker PLA @U1",
+      "type" : "PLA"
+    },
+    {
+      "color" : "#1F2A44",
+      "filament" : 4
+ok   head assignment used — [{"color":"#F2F2F2","filament":1,"grams":14.3,"head":1,"preset":"Snapmaker PLA @U1","type":"PLA"},{"color":"#1F2A44","filament":4,"grams":0.2,"head":2,"preset":"Snapmaker PLA @U1","type":"PLA"},{"color":"#F28C28","filament":3,"grams":1.1,"head":3,"preset":"Snapmaker PLA @U1","type":"PLA"},{"color":"#0A6E70","filament":2,"grams":1.5,"head":4,"preset":"Snapmaker PLA @U1","type":"PLA"}]
+ok   get_layer_preview returns a PNG
+ok   get_plate_image
+ok   select_plate — Plate 2 (Tags) is selected.
+ok   center_plate — {
+  "fits" : true,
+  "plate" : 2,
+  "problems" : [
+
+  ]
+}
+ok   list_printers — {
+  "printers" : [
+    {
+      "address" : "192.168.1.42",
+      "bed_c" : 0,
+      "connected" : false,
+      "has_camera" : true,
+      "model" : "Bambu Lab X1 Carbon",
+      "nozzle_c" : 0,
+      "
+ok   get_printer_status — {
+  "address" : "192.168.1.42",
+  "bed_c" : 0,
+  "connected" : false,
+  "has_camera" : true,
+  "model" : "Snapmaker U1",
+  "nozzle_c" : 0,
+  "other_printers" : [
+    "Workshop X1 Carbon: Not connected
+ok   start_print refuses without a connected printer — The U1 isn't connected (Not connected).
+ok   control_print without a printer — No printer is connected.
+ok   move_object — {
+  "bed" : {
+    "x_mm" : [
+      0.5,
+      270.5
+    ],
+    "y_mm" : [
+      1,
+      271
+    ]
+  },
+  "center_mm" : [
+    80,
+    90
+  ],
+  "fits" : true,
+  "name" : "Coaster",
+  "object" : 0,
+  "plate" : 1,
+  "size_
+ok   move_object by dx/dy — {
+  "bed" : {
+    "x_mm" : [
+      0.5,
+      270.5
+    ],
+    "y_mm" : [
+      1,
+      271
+    ]
+  },
+  "center_mm" : [
+    90,
+    85
+  ],
+  "fits" : true,
+  "name" : "Coaster",
+  "object" : 0,
+  "plate" : 1,
+  "size_
+ok   arrange_plate — {
+  "arranged" : 1,
+  "bed" : {
+    "x_mm" : [
+      0.5,
+      270.5
+    ],
+    "y_mm" : [
+      1,
+      271
+    ]
+  },
+  "did_not_fit" : [
+
+  ],
+  "objects" : [
+    {
+      "center_mm" : [
+        135.5,
+        136
+      ],
+      "fits" : true,
+      "name" : "Coaster",
+      "object" : 0,
+     
+ok   move_to_plate makes a new plate — {
+  "center_mm" : [
+    135.5,
+    136
+  ],
+  "fits" : true,
+  "name" : "Coaster",
+  "object" : 0,
+  "plate" : 3,
+  "plates" : 3,
+  "size_mm" : [
+    90,
+    90,
+    3.2000000000000002
+  ]
+}
+ok   move_to_plate back to plate 1 — {
+  "center_mm" : [
+    135.5,
+    136
+  ],
+  "fits" : true,
+  "name" : "Coaster",
+  "object" : 0,
+  "plate" : 1,
+  "plates" : 3,
+  "size_mm" : [
+    90,
+    90,
+    3.2000000000000002
+  ]
+}
+ok   get_queue — {
+  "jobs" : [
+
+  ],
+  "note" : "A printer takes its next print only after the user says its bed is clear (start_queue asks on the phone).",
+  "printers" : [
+
+  ],
+  "running" : false
+}
+ok   add_to_queue: two plates, two copies — {
+  "added" : 4,
+  "note" : "The queue isn't running. start_queue starts it after the user confirms the beds are clear on the phone.",
+  "running" : false,
+  "waiting" : 4
+}
+ok   queue lists them waiting — {
+  "jobs" : [
+    {
+      "job" : "d74d22b7",
+      "plate" : 1,
+      "plate_name" : "Coaster",
+      "printer" : "any U1",
+      "project" : "Duo demo",
+      "status" : "waiting"
+    },
+    {
+      "job" : "9a9be9ab",
+      "plate" : 2,
+      "plate_name" : "Tags",
+      "printer" : "any U1",
+  
+ok   add_to_queue with a bad plate — There's no plate 9. Plates: 1, 2, 3.
+ok   remove_from_queue empties it — {
+  "jobs" : [
+
+  ],
+  "note" : "A printer takes its next print only after the user says its bed is clear (start_queue asks on the phone).",
+  "printers" : [
+
+  ],
+  "running" : false
+}
+ok   pause_queue — The queue is paused. Prints already sent keep printing.
+ok   start_queue with nothing waiting — Nothing is waiting in the queue. add_to_queue adds prints.
+ok   get_camera_image fails cleanly without a reachable camera — The Workshop U1's camera didn't send a picture (Connecting to the camera…)
+ok   get_printer_status for an unknown printer — No printer matches "nobody". Printers: Workshop X1 Carbon, Workshop U1.
+ok   open_project with a bad name — No project called "nope-not-here". Projects: 
+app end-to-end passed

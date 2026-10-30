@@ -1,0 +1,8 @@
+01:43:45 P1S FTPS on 127.0.0.2:990
+01:43:45 P1S camera (JPEG) on 127.0.0.2:6000
+01:43:45 P1S MQTT on 127.0.0.2:8883
+01:43:45 U1 Moonraker on 127.0.0.3:7125
+01:43:50 U1: GET /printer/objects/list from 127.0.0.3
+01:44:00 P1S: 8883 connection from 127.0.0.2
+01:44:00 P1S: 8883 connection from 127.0.0.2
+01:44:00 U1: GET /printer/objects/list from 127.0.0.3

@@ -1,0 +1,62 @@
+01:44:40 P1S MQTT on 127.0.0.2:8883
+01:44:40 P1S camera (JPEG) on 127.0.0.2:6000
+01:44:40 P1S FTPS on 127.0.0.2:990
+01:44:40 X1C FTPS on 127.0.0.4:990
+01:44:40 X1C MQTT on 127.0.0.4:8883
+01:44:40 X1C camera (RTSPS) on 127.0.0.4:322
+01:44:40 U1 Moonraker on 127.0.0.3:7125
+01:44:50 P1S: debug print Benchy
+01:44:54 P1S: 8883 connection from 127.0.0.2
+01:44:54 X1C: 8883 connection from 127.0.0.4
+01:44:55 P1S: MQTT login from 127.0.0.2 as bblp: ok
+01:44:55 X1C: MQTT login from 127.0.0.4 as bblp: ok
+01:45:20 P1S: debug print Benchy
+01:45:22 P1S: 8883 connection from 127.0.0.2
+01:45:22 X1C: 8883 connection from 127.0.0.4
+01:45:22 X1C: MQTT login from 127.0.0.4 as bblp: ok
+01:45:22 P1S: MQTT login from 127.0.0.2 as bblp: ok
+01:45:23 P1S: camera login from 127.0.0.2: ok
+01:45:23 P1S: camera frame 1
+01:45:34 P1S: camera frame 20
+01:45:45 P1S: camera frame 40
+01:45:46 X1C: debug print Gearbox
+01:45:49 P1S: 8883 connection from 127.0.0.2
+01:45:49 X1C: 8883 connection from 127.0.0.4
+01:45:49 P1S: MQTT login from 127.0.0.2 as bblp: ok
+01:45:49 X1C: MQTT login from 127.0.0.4 as bblp: ok
+01:45:50 X1C: RTSP Digest login from 127.0.0.4: ok
+01:45:50 X1C: RTSP DESCRIBE rtsps://127.0.0.4:322/streaming/live/1
+01:45:50 X1C: RTSP SETUP rtsps://127.0.0.4:322/streaming/live/1/track1
+01:45:50 X1C: RTSP PLAY, streaming H.264
+01:45:50 X1C: RTSP frame 1
+01:46:05 X1C: RTSP frame 100
+01:46:17 X1C: RTSP stream ended after 176 frames
+01:46:18 P1S: 8883 connection from 127.0.0.2
+01:46:18 P1S: MQTT login from 127.0.0.2 as bblp: ok
+01:46:18 X1C: 8883 connection from 127.0.0.4
+01:46:18 X1C: MQTT login from 127.0.0.4 as bblp: ok
+01:46:19 U1: GET /server/webcams/list from 127.0.0.3
+01:46:19 U1: WebSocket open
+01:46:19 U1: WebSocket camera.start_monitor {"domain": "lan", "interval": 0}
+01:46:30 U1: WebSocket camera.start_monitor {"domain": "lan", "interval": 0}
+01:46:40 U1: WebSocket camera.start_monitor {"domain": "lan", "interval": 0}
+01:46:50 U1: WebSocket camera.start_monitor {"domain": "lan", "interval": 0}
+01:47:01 U1: WebSocket camera.start_monitor {"domain": "lan", "interval": 0}
+01:47:03 P1S: 8883 connection from 127.0.0.2
+01:47:04 P1S: MQTT login from 127.0.0.2 as bblp: ok
+01:47:04 X1C: 8883 connection from 127.0.0.4
+01:47:04 X1C: MQTT login from 127.0.0.4 as bblp: ok
+01:47:06 P1S: FTPS upload Duo_demo_Coaster_p1.gcode.3mf (161498 bytes)
+01:47:06 P1S: print Duo_demo_Coaster_p1.gcode.3mf as 'Duo_demo_Coaster' (uploaded: 161498 bytes, plate Metadata/plate_1.gcode, ams True [0, 1, 2, 1], leveling False)
+01:47:06 U1: upload Duo_demo_Tags_p2.gcode (382526 bytes with the form)
+01:47:06 U1: start Duo_demo_Tags_p2.gcode
+01:48:53 U1: debug print Coasters
+01:48:56 P1S: 8883 connection from 127.0.0.2
+01:48:56 P1S: MQTT login from 127.0.0.2 as bblp: ok
+01:48:56 X1C: 8883 connection from 127.0.0.4
+01:48:56 X1C: MQTT login from 127.0.0.4 as bblp: ok
+01:48:57 U1: GET /server/webcams/list from 127.0.0.3
+01:48:57 U1: WebSocket open
+01:48:57 U1: WebSocket camera.start_monitor {"domain": "lan", "interval": 0}
+01:49:08 U1: WebSocket camera.start_monitor {"domain": "lan", "interval": 0}
+01:49:18 U1: WebSocket camera.start_monitor {"domain": "lan", "interval": 0}
