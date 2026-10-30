@@ -7,14 +7,29 @@ struct PrintPanel: View {
     @State private var opts = StartOptions()
     @State private var bedClear = false
     @State private var sending = false
-    @State private var showPrinters = false
+    @State private var sheet: PrintSheet?
     @State private var confirmStop = false
+    @State private var showCamera = false
 
     var body: some View {
         List {
             Section {
-                Button { showPrinters = true } label: { PrinterStatusRow() }
+                Button { sheet = .printers } label: { PrinterStatusRow() }
                 PrintProgressRows(confirmStop: $confirmStop)
+                if let c = printer.activeConnection, c.connected, c.model?.cameraKinds.isEmpty == false {
+                    // the camera shows while printing; before a print it's a tap away (is the bed clear?)
+                    if printer.isBusy || showCamera {
+                        CameraView(connection: c, height: 190)
+                            .listRowInsets(EdgeInsets())
+                    }
+                    if !printer.isBusy {
+                        Button {
+                            showCamera.toggle()
+                        } label: {
+                            Label(showCamera ? "Hide camera" : "Show camera", systemImage: showCamera ? "video.slash" : "video")
+                        }
+                    }
+                }
             } header: { Text("Printer") }
 
             if model.target.isToolChanger, let p = model.plate {
@@ -81,9 +96,18 @@ struct PrintPanel: View {
                                 formatDuration(s.seconds ?? 0), s.grams ?? 0, model.target.shortName))
                 }
             }
+
+            Section {
+                Button { sheet = .addToQueue } label: { Label("Add to print queue", systemImage: "text.badge.plus") }
+                Button { sheet = .queue } label: { QueueSummaryRow() }
+            } header: {
+                Text("Queue")
+            } footer: {
+                Text("Line up this plate, all plates or several copies, on this printer or any \(model.target.shortName). Each print starts after you say the bed is clear.")
+            }
         }
         .listStyle(.insetGrouped)
-        .sheet(isPresented: $showPrinters) { PrintersView() }
+        .sheet(item: $sheet) { s in PrintSheetContent(sheet: s, start: opts) }
         .confirmationDialog("Stop this print?", isPresented: $confirmStop, titleVisibility: .visible) {
             Button("Stop print", role: .destructive) { printer.send("stop") }
         } message: {
@@ -225,90 +249,6 @@ struct ToolheadSection: View {
 }
 
 /// Saved printers: pick the one to slice for and print on, add or edit them.
-struct PrintersView: View {
-    @EnvironmentObject var printer: PrinterLink
-    @EnvironmentObject var model: AppModel
-    @Environment(\.dismiss) private var dismiss
-    @State private var editing: SavedPrinter?
-    @State private var adding = false
-
-    var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    ForEach(printer.printers) { p in
-                        HStack(spacing: 12) {
-                            Button {
-                                printer.select(p.id)
-                            } label: {
-                                HStack(spacing: 12) {
-                                    Image(systemName: p.id == printer.activeID ? "checkmark.circle.fill" : "circle")
-                                        .foregroundStyle(p.id == printer.activeID ? Theme.accent : .secondary)
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(p.name).foregroundStyle(.primary)
-                                        Text("\(p.model?.name ?? p.modelID) · \(p.hostOnly)").font(.footnote).foregroundStyle(.secondary)
-                                    }
-                                    Spacer()
-                                }
-                            }
-                            .buttonStyle(.plain)
-                            Button { editing = p } label: { Image(systemName: "info.circle") }
-                                .buttonStyle(.borderless)
-                        }
-                    }
-                    .onDelete { idx in idx.map { printer.printers[$0] }.forEach(printer.remove) }
-                    Button { adding = true } label: { Label("Add printer", systemImage: "plus") }
-                } header: {
-                    Text("Your printers")
-                } footer: {
-                    Text("Duo Slicer slices for the selected printer and sends prints to it over your Wi-Fi.")
-                }
-
-                if printer.printers.isEmpty {
-                    Section {
-                        Picker("Slice for", selection: Binding(get: { model.target.id }, set: { id in Task { await model.setTarget(id) } })) {
-                            ForEach(PrinterCatalog.models) { Text($0.name).tag($0.id) }
-                        }
-                    } footer: {
-                        Text("No printer on your network yet? You can still slice for any of these and share the file.")
-                    }
-                }
-
-                if let p = printer.active {
-                    Section(p.name) {
-                        LabeledContent("Status", value: printer.statusText)
-                        if printer.connected {
-                            ForEach(printer.trays) { t in
-                                HStack {
-                                    Circle().fill(t.loaded && !t.color.isEmpty ? Color(hex: t.color) : .clear).overlay(Circle().stroke(.secondary)).frame(width: 14, height: 14)
-                                    Text(t.label)
-                                    Spacer()
-                                    Text(t.loaded ? t.name : "Empty").foregroundStyle(.secondary)
-                                }
-                            }
-                            ForEach(printer.toolheads) { h in
-                                HStack {
-                                    Circle().fill(h.loaded && !h.color.isEmpty ? Color(hex: h.color) : .clear).overlay(Circle().stroke(.secondary)).frame(width: 14, height: 14)
-                                    Text(h.label)
-                                    Spacer()
-                                    Text("\(h.summary) · \(Int(h.temperature))°C").foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            .navigationTitle("Printers")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
-            }
-            .sheet(item: $editing) { p in PrinterEditor(printer: p) }
-            .sheet(isPresented: $adding) { AddPrinterView() }
-        }
-    }
-}
-
 struct PrinterEditor: View {
     @EnvironmentObject var link: PrinterLink
     @Environment(\.dismiss) private var dismiss

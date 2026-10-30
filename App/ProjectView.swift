@@ -41,6 +41,7 @@ struct ProjectView: View {
     @State private var pickFace = false
     @State private var shareURL: URL?
     @State private var fold: CGRect?
+    @State private var sheet: PrintSheet?
 
     /// A crease running top to bottom (the unfolded iPhone Duo held wide): the navigation bar's centred title would sit on it,
     /// so each half gets its own header instead. Depends only on the fold, not on the layout, so hiding the bar can't flip it.
@@ -62,6 +63,10 @@ struct ProjectView: View {
                 .overlay {
                     if DemoMode.showFold { FoldDebugOverlay(fold: fold, size: geo.size) }
                 }
+            }
+            .sheet(item: $sheet) { s in PrintSheetContent(sheet: s) }
+            .onReceive(NotificationCenter.default.publisher(for: .duoDemoSheet)) { n in
+                if let s = (n.object as? String).flatMap(PrintSheet.init(rawValue:)) { sheet = s }
             }
             .background(FoldReader(fold: $fold))
             .navigationTitle(model.fileName)
@@ -168,6 +173,17 @@ struct ProjectView: View {
                     Task { shareURL = await model.exportSlicedFile() }
                 } label: { Label("Share sliced file", systemImage: "doc.zipper") }
             }
+            Divider()
+            Button {
+                sheet = .addToQueue
+            } label: { Label("Add to print queue", systemImage: "text.badge.plus") }
+            .disabled(model.plate?.isEmpty ?? true)
+            Button {
+                sheet = .queue
+            } label: { Label("Print queue", systemImage: "list.number") }
+            Button {
+                sheet = .printers
+            } label: { Label("Printers", systemImage: "printer") }
         } label: {
             Image(systemName: "ellipsis.circle")
                 .accessibilityLabel("More")

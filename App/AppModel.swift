@@ -516,8 +516,11 @@ final class AppModel: ObservableObject {
 
     var jobName: String { "\(fileName) \(plate?.name ?? "")" }
 
+    /// The project as it is now (placement edits, plates), as a 3MF.
+    func exportProjectData() async -> Data? { await run { $0.exportProject() } }
+
     func exportProjectFile() async -> URL? {
-        guard let data = await run({ $0.exportProject() }) else { return nil }
+        guard let data = await exportProjectData() else { return nil }
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(fileName)-edited.3mf")
         try? FileManager.default.removeItem(at: url)
         do { try data.write(to: url) } catch { return nil }

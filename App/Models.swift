@@ -111,7 +111,7 @@ struct SliceSummary: Codable {
 }
 
 /// What the user chose in the settings screen; sent to the engine as JSON.
-struct PrintOptions: Equatable {
+struct PrintOptions: Codable, Hashable {
     var process: String = ""
     var filaments: [String] = []      // preset name per project filament
     var colors: [String] = []         // hex per project filament

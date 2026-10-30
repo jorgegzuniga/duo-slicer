@@ -6,6 +6,7 @@ struct A1SlicerApp: App {
     @StateObject private var model = AppModel()
     @StateObject private var printer = PrinterLink()
     @StateObject private var claude = ClaudeBridge()
+    @StateObject private var queue = PrintQueue()
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
@@ -15,12 +16,14 @@ struct A1SlicerApp: App {
                 .environmentObject(model)
                 .environmentObject(printer)
                 .environmentObject(claude)
+                .environmentObject(queue)
                 .tint(Theme.accent)
                 .onOpenURL { url in Task { await model.open(url: url) } }
                 .onAppear {
-                    claude.attach(model: model, printer: printer)
+                    claude.attach(model: model, printer: printer, queue: queue)
+                    queue.attach(printer)
                     if DemoMode.isOn {
-                        Task { await DemoMode.run(model: model, printer: printer, claude: claude) }
+                        Task { await DemoMode.run(model: model, printer: printer, claude: claude, queue: queue) }
                     } else {
                         printer.start()
                     }
@@ -114,6 +117,7 @@ struct HomeView: View {
     @State private var showPrinters = false
     @State private var showAddPrinter = false
     @State private var showClaude = false
+    @State private var showQueue = false
     @State private var fold: CGRect?
 
     var body: some View {
@@ -152,7 +156,15 @@ struct HomeView: View {
             .sheet(isPresented: $showPrinters) { PrintersView() }
             .sheet(isPresented: $showAddPrinter) { AddPrinterView() }
             .sheet(isPresented: $showClaude) { ClaudeSettingsView() }
+            .sheet(isPresented: $showQueue) { QueueView() }
             .onAppear { if UserDefaults.standard.bool(forKey: "DuoDemoAddPrinter") { showAddPrinter = true } }
+            .onReceive(NotificationCenter.default.publisher(for: .duoDemoSheet)) { n in
+                switch n.object as? String {
+                case "printers": showPrinters = true
+                case "queue": showQueue = true
+                default: break
+                }
+            }
         }
     }
 
@@ -200,9 +212,18 @@ struct HomeView: View {
                 PrinterStatusRow()
             }
         } header: {
-            Text("Printer")
+            Text(printer.printers.count > 1 ? "Printers" : "Printer")
         } footer: {
-            Text("Slicing for the \(model.target.name).")
+            Text(printer.printers.count > 1
+                 ? "\(printer.printers.count) printers. Plates are sliced for the selected one, the \(model.target.name)."
+                 : "Slicing for the \(model.target.name).")
+        }
+        Section {
+            Button {
+                showQueue = true
+            } label: {
+                QueueSummaryRow()
+            }
         }
         Section {
             Button {
@@ -235,10 +256,30 @@ struct PrinterStatusRow: View {
                 Text(printer.active.map { "\($0.name) · \($0.hostOnly)" } ?? "Add your printer")
                     .foregroundStyle(.primary)
                 Text(statusLine).font(.footnote).foregroundStyle(.secondary)
+                if let others = othersLine {
+                    Text(others).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                }
             }
             Spacer()
             Image(systemName: "chevron.right").font(.footnote).foregroundStyle(.tertiary)
         }
+    }
+
+    /// The other printers, briefly: "Also: Office U1 printing 45%, Garage X1C ready".
+    var othersLine: String? {
+        let others = printer.all.filter { $0.id != printer.activeID }
+        guard !others.isEmpty else { return nil }
+        let parts = others.map { c -> String in
+            guard c.connected else { return "\(c.printer.name) offline" }
+            switch c.state {
+            case "RUNNING": return "\(c.printer.name) printing \(c.percent)%"
+            case "PAUSE": return "\(c.printer.name) paused"
+            case "PREPARE": return "\(c.printer.name) starting"
+            case "FINISH": return "\(c.printer.name) finished"
+            default: return "\(c.printer.name) ready"
+            }
+        }
+        return "Also: " + parts.joined(separator: ", ")
     }
 
     var statusLine: String {

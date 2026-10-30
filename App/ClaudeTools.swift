@@ -7,6 +7,7 @@ struct ClaudeTools {
     let bridge: ClaudeBridge
     let model: AppModel?
     let printer: PrinterLink?
+    let queue: PrintQueue?
 
     typealias Result = [String: Any]
 
@@ -23,15 +24,24 @@ struct ClaudeTools {
         case "lay_flat": return await transform(model, a, kind: "flat")
         case "reset_object": return await transform(model, a, kind: "reset")
         case "center_plate": return await centerPlate(model, a)
+        case "move_object": return await moveObject(model, a)
+        case "arrange_plate": return await arrangePlate(model, a)
+        case "move_to_plate": return await moveToPlate(model, a)
         case "set_toolheads": return await setToolheads(model, a)
         case "slice_plate": return await slicePlate(model, a)
         case "get_layer_preview": return await layerPreview(model, a)
         case "get_plate_image": return plateImage(model, a)
         case "list_printers": return listPrinters(model, printer)
         case "select_printer": return await selectPrinter(model, printer, a)
-        case "get_printer_status": return printerStatus(printer)
+        case "get_printer_status": return printerStatus(printer, a)
+        case "get_camera_image": return await cameraImage(printer, a)
         case "start_print": return await startPrint(model, printer, a)
         case "control_print": return await controlPrint(printer, a)
+        case "get_queue": return queueStatus(printer)
+        case "add_to_queue": return await addToQueue(model, printer, a)
+        case "remove_from_queue": return removeFromQueue(a)
+        case "start_queue": return await startQueue(printer)
+        case "pause_queue": return pauseQueue()
         default: return fail("Unknown tool \(name).")
         }
     }
@@ -44,9 +54,11 @@ struct ClaudeTools {
         guard let d = try? JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted, .sortedKeys]) else { return text("\(obj)") }
         return text(String(decoding: d, as: UTF8.self))
     }
-    func image(_ png: Data, _ caption: String) -> Result {
-        ["content": [["type": "image", "data": png.base64EncodedString(), "mimeType": "image/png"], ["type": "text", "text": caption]]]
+    func image(_ data: Data, mime: String = "image/png", _ caption: String) -> Result {
+        ["content": [["type": "image", "data": data.base64EncodedString(), "mimeType": mime], ["type": "text", "text": caption]]]
     }
+
+    func round1(_ v: Double) -> Double { (v * 10).rounded() / 10 }
 
     func int(_ v: Any?) -> Int? {
         if let n = v as? NSNumber { return n.intValue }
@@ -257,6 +269,70 @@ struct ClaudeTools {
         return json(["plate": pl?.id ?? 0, "fits": !(pl?.offBed ?? true), "problems": pl?.fitIssues ?? []])
     }
 
+    /// Where an object sits now.
+    func placement(_ model: AppModel, _ o: Int) -> [String: Any] {
+        let obj = model.project?.plates.flatMap { $0.objects }.first { $0.index == o }
+        let plate = model.project?.plates.first { $0.objects.contains { $0.index == o } }
+        let c = obj?.center ?? (x: 0, y: 0)
+        var size: [Double] = []
+        if let ob = obj, ob.min.count == 3, ob.max.count == 3 { size = (0..<3).map { round1(ob.max[$0] - ob.min[$0]) } }
+        var d: [String: Any] = ["object": o, "name": obj?.name ?? "", "plate": plate?.id ?? 0, "center_mm": [round1(c.x), round1(c.y)],
+                                "size_mm": size, "fits": !(obj?.offBed ?? false)]
+        if let f = obj?.fit, !f.isEmpty { d["problem"] = f }
+        return d
+    }
+
+    func bedInfo(_ model: AppModel) -> [String: Any] {
+        let b = model.bed
+        return ["x_mm": [round1(b.x0), round1(b.x1)], "y_mm": [round1(b.y0), round1(b.y1)]]
+    }
+
+    func moveObject(_ model: AppModel, _ a: [String: Any]) async -> Result {
+        if let r = needProject(model) { return r }
+        guard let o = objectIndex(model, a["object"]) else { return fail("No such object. get_project lists each plate's objects.") }
+        if let pl = model.project?.plates.firstIndex(where: { $0.objects.contains { $0.index == o } }), pl != model.plateIndex { await model.selectPlate(pl) }
+        if let x = dbl(a["x"]), let y = dbl(a["y"]) {
+            await model.place(object: o, x: x, y: y)
+        } else if a["dx"] != nil || a["dy"] != nil {
+            await model.move(object: o, dx: dbl(a["dx"]) ?? 0, dy: dbl(a["dy"]) ?? 0)
+        } else {
+            return fail("Give x and y (where the middle of the object goes on the bed, mm) or dx and dy (how far to move it, mm).")
+        }
+        var out = placement(model, o)
+        out["bed"] = bedInfo(model)
+        return json(out)
+    }
+
+    func arrangePlate(_ model: AppModel, _ a: [String: Any]) async -> Result {
+        if let r = needProject(model) { return r }
+        guard let i = plateIndex(model, a["plate"]) else { return fail("No such plate. Plates: \(model.project!.plates.map { String($0.id) }.joined(separator: ", "))") }
+        if i != model.plateIndex { await model.selectPlate(i) }
+        let left = await model.arrangePlate(i, allowRotation: (a["allow_rotation"] as? Bool) ?? false)
+        if let e = model.errorMessage { model.errorMessage = nil; return fail(e) }
+        let objects = model.project?.plates[safe: i]?.objects ?? []
+        return json(["plate": model.project?.plates[safe: i]?.id ?? 0, "arranged": objects.count - left.count, "did_not_fit": left,
+                     "objects": objects.map { placement(model, $0.index) }, "bed": bedInfo(model)])
+    }
+
+    func moveToPlate(_ model: AppModel, _ a: [String: Any]) async -> Result {
+        if let r = needProject(model) { return r }
+        guard let o = objectIndex(model, a["object"]) else { return fail("No such object. get_project lists each plate's objects.") }
+        var target: Int?
+        if let n = int(a["plate"]), n > 0 {
+            guard let i = model.project?.plates.firstIndex(where: { $0.id == n }) else { return fail("There's no plate \(n). Leave plate out to put it on a new plate.") }
+            target = i
+        }
+        guard let to = await model.moveObject(o, toPlate: target) else {
+            let e = model.errorMessage ?? "Couldn't move it."
+            model.errorMessage = nil
+            return fail(e)
+        }
+        await model.selectPlate(to)
+        var out = placement(model, o)
+        out["plates"] = model.project?.plates.count ?? 0
+        return json(out)
+    }
+
     func setToolheads(_ model: AppModel, _ a: [String: Any]) async -> Result {
         if let r = needProject(model) { return r }
         guard model.target.isToolChanger else { return fail("The \(model.target.name) uses an AMS; spools are picked when printing (start_print's spools).") }
@@ -305,46 +381,114 @@ struct ClaudeTools {
 
     // MARK: printers
 
+    /// A saved printer by name (or model), or the selected one when no name is given.
+    func connection(_ printer: PrinterLink, _ v: Any?) -> PrinterConnection? {
+        let want = (v as? String ?? "").lowercased().trimmingCharacters(in: .whitespaces)
+        if want.isEmpty { return printer.activeConnection }
+        let all = printer.all
+        return all.first { $0.printer.name.lowercased() == want }
+            ?? all.first { $0.printer.name.lowercased().contains(want) }
+            ?? all.first { c in
+                guard let m = c.printer.model else { return false }
+                return m.shortName.lowercased() == want || m.name.lowercased().contains(want)
+            }
+    }
+
+    func noPrinter(_ printer: PrinterLink, _ v: Any?) -> String {
+        if printer.printers.isEmpty { return "No printer is set up in Duo Slicer." }
+        return "No printer matches \"\(v as? String ?? "")\". Printers: \(printer.printers.map(\.name).joined(separator: ", "))."
+    }
+
+    /// One printer's live state.
+    func status(of c: PrinterConnection, _ printer: PrinterLink) -> [String: Any] {
+        var o: [String: Any] = ["printer": c.printer.name, "model": c.model?.name ?? "", "address": c.printer.hostOnly,
+                                "selected": c.id == printer.activeID, "connected": c.connected, "status": c.statusText,
+                                "state": c.state, "summary": PrinterCard.describe(c),
+                                "nozzle_c": Int(c.nozzle), "bed_c": Int(c.bed), "has_camera": c.model?.cameraKinds.isEmpty == false]
+        if c.isBusy {
+            o["percent"] = c.percent
+            o["remaining_minutes"] = c.remainingMinutes
+            o["layer"] = c.layer
+            o["total_layers"] = c.totalLayers
+            o["job"] = c.jobName
+        }
+        if let e = c.errorText { o["error"] = e }
+        if let q = queue {
+            if let j = q.activeJob(on: c.id) { o["queue_print"] = j.title }
+            if q.running && q.needsBedCheck(c) { o["waiting_for_bed_check"] = true }
+        }
+        return o
+    }
+
     func listPrinters(_ model: AppModel, _ printer: PrinterLink) -> Result {
-        json(["printers": printer.printers.map { p -> [String: Any] in
-                  ["name": p.name, "model": p.model?.name ?? p.modelID, "selected": p.id == printer.activeID, "address": p.hostOnly]
-              },
+        json(["printers": printer.all.map { status(of: $0, printer) },
               "slicing_for": model.target.name,
               "supported_models": PrinterCatalog.models.map(\.name)])
     }
 
     func selectPrinter(_ model: AppModel, _ printer: PrinterLink, _ a: [String: Any]) async -> Result {
         let want = (a["printer"] as? String ?? "").lowercased()
-        if let p = printer.printers.first(where: { $0.name.lowercased() == want }) ?? printer.printers.first(where: { $0.name.lowercased().contains(want) || ($0.model?.name.lowercased().contains(want) ?? false) }), !want.isEmpty {
-            printer.select(p.id)
-            await model.setTarget(p.modelID)
-            return text("Selected \(p.name) (\(p.model?.name ?? "")). Plates are now sliced for it.")
+        if !want.isEmpty, let c = connection(printer, want) {
+            printer.select(c.id)
+            await model.setTarget(c.printer.modelID)
+            return text("Selected \(c.printer.name) (\(c.model?.name ?? "")). Plates are now sliced for it.")
         }
         if printer.printers.isEmpty, let m = PrinterCatalog.models.first(where: { $0.name.lowercased().contains(want) || $0.id == want }), !want.isEmpty {
             await model.setTarget(m.id)
             return text("Slicing for the \(m.name). No printer is saved in the app, so the file can be shared but not sent.")
         }
-        return fail("No printer matches \"\(want)\". Saved: \(printer.printers.map(\.name).joined(separator: ", ")).")
+        return fail(noPrinter(printer, a["printer"]))
     }
 
-    func printerStatus(_ printer: PrinterLink) -> Result {
-        guard let p = printer.active else { return text("No printer is set up in Duo Slicer.") }
-        var o: [String: Any] = ["printer": p.name, "model": p.model?.name ?? "", "connected": printer.connected, "status": printer.statusText,
-                                "state": printer.state, "percent": printer.percent, "remaining_minutes": printer.remainingMinutes,
-                                "layer": printer.layer, "total_layers": printer.totalLayers, "nozzle_c": Int(printer.nozzle), "bed_c": Int(printer.bed),
-                                "job": printer.jobName]
-        if let e = printer.errorText { o["error"] = e }
-        if !printer.trays.isEmpty {
-            o["spools"] = printer.trays.map { t -> [String: Any] in ["slot": t.label, "id": t.id, "loaded": t.loaded, "type": t.type, "color": t.color, "name": t.name] }
+    func printerStatus(_ printer: PrinterLink, _ a: [String: Any]) -> Result {
+        guard let c = connection(printer, a["printer"]) else {
+            return printer.printers.isEmpty ? text("No printer is set up in Duo Slicer.") : fail(noPrinter(printer, a["printer"]))
         }
-        if !printer.toolheads.isEmpty {
-            o["heads"] = printer.toolheads.map { h -> [String: Any] in ["head": h.id + 1, "loaded": h.loaded, "filament": h.summary, "color": h.color, "temp_c": Int(h.temperature)] }
+        var o = status(of: c, printer)
+        if !c.trays.isEmpty {
+            o["spools"] = c.trays.map { t -> [String: Any] in ["slot": t.label, "id": t.id, "loaded": t.loaded, "type": t.type, "color": t.color, "name": t.name] }
         }
+        if !c.toolheads.isEmpty {
+            o["heads"] = c.toolheads.map { h -> [String: Any] in ["head": h.id + 1, "loaded": h.loaded, "filament": h.summary, "color": h.color, "temp_c": Int(h.temperature)] }
+        }
+        if printer.printers.count > 1 { o["other_printers"] = printer.all.filter { $0.id != c.id }.map { "\($0.printer.name): \(PrinterCard.describe($0))" } }
         return json(o)
+    }
+
+    /// A fresh picture from a printer's camera.
+    func cameraImage(_ printer: PrinterLink, _ a: [String: Any]) async -> Result {
+        guard let c = connection(printer, a["printer"]) else { return fail(noPrinter(printer, a["printer"])) }
+        guard c.model?.cameraKinds.isEmpty == false, let cam = printer.camera(for: c.id) else {
+            return fail("Duo Slicer can't show the \(c.printer.name)'s camera.")
+        }
+        guard let img = await cam.snapshot(timeout: 15) else {
+            return fail("The \(c.printer.name)'s camera didn't send a picture (\(cam.status))")
+        }
+        guard let jpeg = Self.jpeg(img, maxSide: 1280) else { return fail("Couldn't encode the camera picture.") }
+        let time = Date().formatted(date: .omitted, time: .shortened)
+        return image(jpeg, mime: "image/jpeg", "\(c.printer.name)'s camera at \(time). \(PrinterCard.describe(c)).")
+    }
+
+    static func jpeg(_ img: UIImage, maxSide: CGFloat) -> Data? {
+        let s = img.size
+        let k = min(1, maxSide / max(1, max(s.width, s.height)))
+        if k >= 1 { return img.jpegData(compressionQuality: 0.75) }
+        let size = CGSize(width: (s.width * k).rounded(), height: (s.height * k).rounded())
+        let fmt = UIGraphicsImageRendererFormat()
+        fmt.scale = 1
+        fmt.opaque = true
+        return UIGraphicsImageRenderer(size: size, format: fmt).jpegData(withCompressionQuality: 0.75) { _ in
+            img.draw(in: CGRect(origin: .zero, size: size))
+        }
     }
 
     func startPrint(_ model: AppModel, _ printer: PrinterLink, _ a: [String: Any]) async -> Result {
         if let r = needProject(model) { return r }
+        if let name = a["printer"] as? String, !name.isEmpty {
+            // print on another saved printer: select it (plates are then sliced for it)
+            guard let c = connection(printer, name) else { return fail(noPrinter(printer, name)) }
+            if c.id != printer.activeID { printer.select(c.id) }
+        }
         guard let p = printer.active, let pm = p.model else { return fail("No printer is set up in Duo Slicer.") }
         if let i = plateIndex(model, a["plate"]), i != model.plateIndex { await model.selectPlate(i) }
         if pm.id != model.target.id { await model.setTarget(pm.id) }
@@ -379,17 +523,114 @@ struct ClaudeTools {
         }
     }
 
+    // MARK: queue
+
+    func queueStatus(_ printer: PrinterLink) -> Result {
+        guard let queue else { return fail("The print queue isn't ready yet.") }
+        let jobs = queue.jobs.map { j -> [String: Any] in
+            var d: [String: Any] = ["job": j.shortID, "project": j.project, "plate": j.plateNumber, "plate_name": j.plateLabel, "status": j.status.rawValue]
+            if let pid = j.printerID {
+                d["printer"] = printer.connection(pid)?.printer.name ?? "(removed)"
+            } else {
+                d["printer"] = "any " + (PrinterCatalog.model(j.modelID)?.shortName ?? j.modelID)
+            }
+            if let p = j.printedOn { d["printed_on"] = printer.connection(p)?.printer.name ?? "" }
+            if let m = j.message { d["message"] = m }
+            if let s = j.seconds { d["time"] = formatDuration(s) }
+            if let g = j.grams { d["grams"] = round1(g) }
+            return d
+        }
+        let printers = printer.all.filter { queue.activeJob(on: $0.id) != nil || queue.next(for: $0) != nil }.map { c -> [String: Any] in
+            ["printer": c.printer.name, "state": PrinterCard.describe(c), "waiting_for_bed_check": queue.needsBedCheck(c), "next_job": queue.next(for: c)?.shortID ?? ""]
+        }
+        return json(["running": queue.running, "jobs": jobs, "printers": printers,
+                     "note": "A printer takes its next print only after the user says its bed is clear (start_queue asks on the phone)."])
+    }
+
+    func addToQueue(_ model: AppModel, _ printer: PrinterLink, _ a: [String: Any]) async -> Result {
+        guard let queue else { return fail("The print queue isn't ready yet.") }
+        if let r = needProject(model) { return r }
+        let info = model.project!
+        var indices: [Int] = []
+        if (a["all_plates"] as? Bool) == true {
+            indices = info.plates.filter { !$0.isEmpty }.map(\.index)
+        } else if let list = a["plates"] as? [Any], !list.isEmpty {
+            for v in list {
+                guard let n = int(v), let i = info.plates.firstIndex(where: { $0.id == n }) else {
+                    return fail("There's no plate \(v). Plates: \(info.plates.map { String($0.id) }.joined(separator: ", ")).")
+                }
+                indices.append(i)
+            }
+        } else {
+            indices = [model.plateIndex]
+        }
+        indices = indices.filter { !info.plates[$0].isEmpty }
+        guard !indices.isEmpty else { return fail("Those plates are empty.") }
+        let copies = max(1, min(50, int(a["copies"]) ?? 1))
+        var printerID: String?
+        if let name = a["printer"] as? String, !name.isEmpty {
+            guard let c = connection(printer, name) else { return fail(noPrinter(printer, name)) }
+            guard c.printer.modelID == model.target.id else {
+                return fail("The \(c.printer.name) is a \(c.model?.shortName ?? "different model") and the project is set up for the \(model.target.name). Call select_printer with it first.")
+            }
+            printerID = c.id
+        }
+        guard let data = await model.exportProjectData() else { return fail("Couldn't save a copy of the project for the queue.") }
+        let plates = indices.map { i in QueuePlate(index: i, number: info.plates[i].id, name: info.plates[i].name, picture: model.thumbnails[i]) }
+        let n = queue.add(project: model.fileName, data: data, plates: plates, copies: copies, modelID: model.target.id, printerID: printerID,
+                          options: model.options, currentPlate: model.plateIndex, start: StartOptions())
+        guard n > 0 else { return fail("Couldn't add those prints to the queue.") }
+        bridge.note("Queued \(n) print\(n == 1 ? "" : "s")")
+        return json(["added": n, "running": queue.running, "waiting": queue.waiting.count,
+                     "note": queue.running ? "The queue is running; free printers with a clear bed take these next."
+                                           : "The queue isn't running. start_queue starts it after the user confirms the beds are clear on the phone."])
+    }
+
+    func removeFromQueue(_ a: [String: Any]) -> Result {
+        guard let queue else { return fail("The print queue isn't ready yet.") }
+        let want = (a["job"] as? String ?? "").trimmingCharacters(in: .whitespaces)
+        guard let j = queue.find(want) else { return fail("No job \"\(want)\" in the queue. get_queue lists them.") }
+        guard j.status != .slicing && j.status != .sending else { return fail("That print is being sent to its printer right now.") }
+        queue.remove([j.id])
+        return text("Removed \(j.title) from the queue." + (j.status == .printing ? " It keeps printing; the queue just stops following it." : ""))
+    }
+
+    func startQueue(_ printer: PrinterLink) async -> Result {
+        guard let queue else { return fail("The print queue isn't ready yet.") }
+        guard !queue.waiting.isEmpty else { return fail("Nothing is waiting in the queue. add_to_queue adds prints.") }
+        let check = printer.all.filter { queue.needsBedCheck($0) }
+        if check.isEmpty {
+            queue.start(clear: [])
+            return text("The queue is running. No printer that can take these prints is free right now; each starts its next print once it's free and the user says its bed is clear.")
+        }
+        let lines = check.map { "\($0.printer.name): \(queue.next(for: $0)?.title ?? "")" }
+        let ok = await bridge.requestApproval(title: "Claude wants to start the print queue",
+                                              detail: lines.joined(separator: "\n") + "\n\nOnly start if each bed is clear and has the right build plate on.",
+                                              confirm: check.count == 1 ? "The bed is clear, start" : "The beds are clear, start")
+        guard ok else { return fail("The user didn't confirm on their phone that the beds are clear.") }
+        queue.start(clear: check.map { $0.id })
+        bridge.note("Started the print queue")
+        return text("Started. Next prints: " + lines.joined(separator: "; ") + ". get_queue follows them.")
+    }
+
+    func pauseQueue() -> Result {
+        guard let queue else { return fail("The print queue isn't ready yet.") }
+        queue.pause()
+        return text("The queue is paused. Prints already sent keep printing.")
+    }
+
     func controlPrint(_ printer: PrinterLink, _ a: [String: Any]) async -> Result {
         let action = (a["action"] as? String ?? "").lowercased()
         guard ["pause", "resume", "stop"].contains(action) else { return fail("action must be pause, resume or stop.") }
-        guard let p = printer.active, printer.connected else { return fail("No printer is connected.") }
+        guard let c = connection(printer, a["printer"]), c.connected else { return fail("No printer is connected.") }
+        let p = c.printer
         if action == "stop" {
-            let ok = await bridge.requestApproval(title: "Claude wants to stop the print on \(p.name)", detail: "\(printer.jobName) · \(printer.percent)%. A stopped print can't be resumed.",
+            let ok = await bridge.requestApproval(title: "Claude wants to stop the print on \(p.name)", detail: "\(c.jobName) · \(c.percent)%. A stopped print can't be resumed.",
                                                   confirm: "Stop print", destructive: true)
             guard ok else { return fail("The user didn't approve stopping the print.") }
         }
         do {
-            try await printer.control(action)
+            try await c.control(action)
             return text("Sent \(action) to \(p.name).")
         } catch {
             return fail(error.localizedDescription)

@@ -26,6 +26,7 @@ final class ClaudeBridge: ObservableObject {
 
     private weak var model: AppModel?
     private weak var printer: PrinterLink?
+    private weak var queue: PrintQueue?
     private var socket: URLSessionWebSocketTask?
     private var generation = 0
     private var foreground = true
@@ -38,9 +39,10 @@ final class ClaudeBridge: ObservableObject {
         relayURL = saved.isEmpty ? baked : saved
     }
 
-    func attach(model: AppModel, printer: PrinterLink) {
+    func attach(model: AppModel, printer: PrinterLink, queue: PrintQueue) {
         self.model = model
         self.printer = printer
+        self.queue = queue
         if enabled { connect() }
     }
 
@@ -185,7 +187,7 @@ final class ClaudeBridge: ObservableObject {
         let name = params["name"] as? String ?? ""
         let args = params["arguments"] as? [String: Any] ?? [:]
         note("Claude: \(name.replacingOccurrences(of: "_", with: " "))")
-        let result = await ClaudeTools(bridge: self, model: model, printer: printer).call(name, args)
+        let result = await ClaudeTools(bridge: self, model: model, printer: printer, queue: queue).call(name, args)
         // long calls (slicing, approvals) can outlive a reconnect; the relay matches the answer by id on any connection
         send(["id": id, "result": result], on: socket ?? t)
     }

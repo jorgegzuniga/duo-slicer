@@ -99,6 +99,61 @@ check("start_print refuses without a connected printer", r.isError === true && /
 r = await call("control_print", { action: "pause" });
 check("control_print without a printer", r.isError === true, text(r).slice(0, 160));
 
+// moving objects
+r = await call("move_object", { object: "Coaster", x: 80, y: 90 });
+let m = json(r);
+check("move_object", !r.isError && m && Math.abs(m.center_mm[0] - 80) < 1.5 && Math.abs(m.center_mm[1] - 90) < 1.5, text(r).slice(0, 220));
+
+r = await call("move_object", { object: "Coaster", dx: 10, dy: -5 });
+m = json(r);
+check("move_object by dx/dy", !r.isError && m && Math.abs(m.center_mm[0] - 90) < 1.5 && Math.abs(m.center_mm[1] - 85) < 1.5, text(r).slice(0, 220));
+
+r = await call("arrange_plate", { plate: 1 });
+m = json(r);
+check("arrange_plate", !r.isError && m && m.arranged >= 1 && m.did_not_fit.length === 0 && m.objects.every((o) => o.fits), text(r).slice(0, 300));
+
+r = await call("move_to_plate", { object: "Coaster" });
+m = json(r);
+check("move_to_plate makes a new plate", !r.isError && m && m.plate === 3 && m.plates === 3 && m.fits, text(r).slice(0, 220));
+
+r = await call("move_to_plate", { object: "Coaster", plate: 1 });
+m = json(r);
+check("move_to_plate back to plate 1", !r.isError && m && m.plate === 1, text(r).slice(0, 220));
+
+// the print queue
+r = await call("get_queue");
+check("get_queue", !r.isError && json(r) && Array.isArray(json(r).jobs), text(r).slice(0, 200));
+
+r = await call("add_to_queue", { plates: [1, 2], copies: 2 });
+check("add_to_queue: two plates, two copies", !r.isError && json(r) && json(r).added === 4, text(r).slice(0, 220));
+
+r = await call("get_queue");
+let q = json(r);
+check("queue lists them waiting", q && q.running === false && q.jobs.filter((j) => j.status === "waiting").length >= 4, text(r).slice(0, 300));
+
+r = await call("add_to_queue", { plates: [9] });
+check("add_to_queue with a bad plate", r.isError === true, text(r).slice(0, 160));
+
+for (const j of (q && q.jobs) || []) {
+  r = await call("remove_from_queue", { job: j.job });
+  if (r.isError) check("remove_from_queue " + j.job, false, text(r).slice(0, 160));
+}
+r = await call("get_queue");
+q = json(r);
+check("remove_from_queue empties it", q && q.jobs.length === 0, text(r).slice(0, 200));
+
+r = await call("pause_queue");
+check("pause_queue", !r.isError, text(r).slice(0, 160));
+
+r = await call("start_queue");
+check("start_queue with nothing waiting", r.isError === true, text(r).slice(0, 160));
+
+r = await call("get_camera_image");
+check("get_camera_image fails cleanly without a reachable camera", r.isError === true, text(r).slice(0, 200));
+
+r = await call("get_printer_status", { printer: "nobody" });
+check("get_printer_status for an unknown printer", r.isError === true, text(r).slice(0, 160));
+
 r = await call("open_project", { name: "nope-not-here" });
 check("open_project with a bad name", r.isError === true, text(r).slice(0, 160));
 

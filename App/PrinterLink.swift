@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import Security
 import SwiftUI
@@ -132,7 +133,7 @@ enum FTPS {
     }
 }
 
-struct StartOptions {
+struct StartOptions: Codable, Hashable {
     var bedLeveling = true
     var flowCalibration = true
     var vibrationCalibration = true
@@ -157,12 +158,13 @@ struct Toolhead: Identifiable, Hashable {
     }
 }
 
+/// One saved printer's live connection: Bambu Lab over MQTT, Snapmaker U1 through Moonraker. Every saved printer has one,
+/// so they can all be watched and used at the same time.
 @MainActor
-final class PrinterLink: ObservableObject {
-    @Published private(set) var printers: [SavedPrinter] = []
-    @Published private(set) var activeID: String?
+final class PrinterConnection: ObservableObject, Identifiable {
+    @Published private(set) var printer: SavedPrinter
     @Published var connected = false
-    @Published var statusText = "Not set up"
+    @Published var statusText = "Not connected"
     @Published var state = "OFFLINE"   // IDLE, PREPARE, RUNNING, PAUSE, FINISH, FAILED, OFFLINE
     @Published var percent = 0
     @Published var remainingMinutes = 0
@@ -177,116 +179,64 @@ final class PrinterLink: ObservableObject {
     @Published var toolheads: [Toolhead] = []  // tool changers
     @Published var uploadProgress: Double?
     @Published var lastResult: String?
+    /// When the printer's state last changed (a finished print, for the queue).
+    @Published private(set) var stateChanged = Date()
+    /// When the printer itself last reported being busy (not our own guess right after sending a print).
+    private(set) var reportedBusyAt: Date?
+
+    /// The printer stopped answering at its address (the fleet may look for it on the Wi-Fi).
+    var onUnreachable: ((SavedPrinter) -> Void)?
 
     private var mqtt: MqttSession?
     private var poller: MoonrakerPoller?
     private var report: [String: Any] = [:]
-    private var lookedFor: Set<String> = []   // printers already searched for on the Wi-Fi this session
+    private var running = false
 
-    init() {
-        let s = PrinterStore.load()
-        printers = s.printers
-        activeID = s.active
+    nonisolated var id: String { printerID }
+    private let printerID: String
+
+    init(_ p: SavedPrinter) {
+        printer = p
+        printerID = p.id
     }
 
-    var active: SavedPrinter? { printers.first { $0.id == activeID } }
-    var activeModel: PrinterModel? { active?.model }
-    var isConfigured: Bool { active != nil }
+    var model: PrinterModel? { printer.model }
     var isBusy: Bool { ["RUNNING", "PAUSE", "PREPARE", "SLICING"].contains(state) }
+    var isIdle: Bool { connected && !isBusy }
+    var secret: String? { Keychain.get(printer.secretKey) }
 
-    func secret(for p: SavedPrinter) -> String? { Keychain.get(p.secretKey) }
-    func hasSecret(_ p: SavedPrinter) -> Bool { secret(for: p) != nil }
-
-    // MARK: printer list
-
-    func upsert(_ printer: SavedPrinter, secret: String?) {
-        var p = printer
-        p.host = p.hostOnly
-        p.serial = p.serial.trimmingCharacters(in: .whitespaces).uppercased()
-        p.name = p.name.trimmingCharacters(in: .whitespaces).isEmpty ? (p.model?.name ?? "Printer") : p.name.trimmingCharacters(in: .whitespaces)
-        if let i = printers.firstIndex(where: { $0.id == p.id }) { printers[i] = p } else { printers.append(p) }
-        if let secret {
-            let t = secret.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !t.isEmpty { Keychain.set(t, for: p.secretKey) }
-        }
-        if activeID == nil || activeID == p.id { activeID = p.id }
-        persist()
-        if activeID == p.id { reconnect() }
+    /// New settings (address, code): reconnect when something that matters changed.
+    func update(_ p: SavedPrinter) {
+        let changed = p.hostOnly != printer.hostOnly || p.serial != printer.serial || p.port != printer.port || p.modelID != printer.modelID
+        printer = p
+        if changed || running { connect() }
     }
-
-    func remove(_ p: SavedPrinter) {
-        printers.removeAll { $0.id == p.id }
-        Keychain.delete(p.secretKey)
-        if activeID == p.id {
-            activeID = printers.first?.id
-            reconnect()
-        }
-        persist()
-    }
-
-    func select(_ id: String) {
-        guard id != activeID, printers.contains(where: { $0.id == id }) else { return }
-        activeID = id
-        persist()
-        reconnect()
-    }
-
-    private func persist() { PrinterStore.save(printers, active: activeID) }
-
-    /// The saved printer a found one is (same serial number, or same address).
-    func saved(matching f: FoundPrinter) -> SavedPrinter? {
-        printers.first { (!f.serial.isEmpty && $0.serial == f.serial) || $0.hostOnly == f.host }
-    }
-
-    /// The printer isn't answering at its address: once per session, search the Wi-Fi for its serial number
-    /// in case the router gave it a new address.
-    private func lookForMoved(_ p: SavedPrinter) {
-        guard !p.serial.isEmpty, !lookedFor.contains(p.id) else { return }
-        lookedFor.insert(p.id)
-        Task { [weak self] in
-            let found = await PrinterDiscovery.search()
-            guard let self else { return }
-            for f in found where f.serial == p.serial { self.follow(f) }
-        }
-    }
-
-    /// A saved Bambu printer turned up at a new address (the router handed out another one): follow it.
-    func follow(_ f: FoundPrinter) {
-        guard !f.serial.isEmpty,
-              let i = printers.firstIndex(where: { $0.serial == f.serial && $0.hostOnly != f.host }) else { return }
-        printers[i].host = f.host
-        persist()
-        if printers[i].id == activeID { reconnect() }
-    }
-
-    // MARK: connection
 
     func start() {
-        if mqtt == nil && poller == nil { reconnect() }
+        if !running { connect() }
     }
 
-    func reconnect() {
-        mqtt?.stop()
-        mqtt = nil
-        poller?.stop()
-        poller = nil
+    func connect() {
+        stop(keepStatus: true)
+        running = true
         report = [:]
         trays = []
         toolheads = []
         connected = false
-        state = "OFFLINE"
+        setState("OFFLINE")
         percent = 0
         layer = 0
         totalLayers = 0
         jobName = ""
         printError = 0
         errorText = nil
-        guard let p = active, let model = p.model else {
-            statusText = "Add a printer to send prints over Wi-Fi."
+        let p = printer
+        guard let model = p.model else {
+            statusText = "Unknown printer model."
             return
         }
         if model.isBambu {
-            guard !p.hostOnly.isEmpty, !p.serial.isEmpty, let code = secret(for: p) else {
+            guard !p.hostOnly.isEmpty, !p.serial.isEmpty, let code = secret else {
                 statusText = "Add the \(model.shortName)'s IP address, serial number and access code."
                 return
             }
@@ -298,8 +248,8 @@ final class PrinterLink: ObservableObject {
                         guard let self, self.mqtt === s else { return }
                         self.connected = ok
                         self.statusText = text
-                        if !ok { self.state = "OFFLINE" }
-                        if !ok && text.hasPrefix("Couldn't reach") { self.lookForMoved(p) }
+                        if !ok { self.setState("OFFLINE") }
+                        if !ok && text.hasPrefix("Couldn't reach") { self.onUnreachable?(self.printer) }
                     }
                 }, onMessage: { data in
                     guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
@@ -310,7 +260,7 @@ final class PrinterLink: ObservableObject {
                 })
             }
         } else {
-            guard let client = MoonrakerClient(host: p.hostOnly, port: p.port, apiKey: secret(for: p)) else {
+            guard let client = MoonrakerClient(host: p.hostOnly, port: p.port, apiKey: secret) else {
                 statusText = "Add the \(model.shortName)'s IP address."
                 return
             }
@@ -323,7 +273,7 @@ final class PrinterLink: ObservableObject {
                         guard let self, self.poller === poll else { return }
                         self.connected = ok
                         self.statusText = text
-                        if !ok { self.state = "OFFLINE" }
+                        if !ok { self.setState("OFFLINE") }
                     }
                 }, onStatus: { st in
                     Task { @MainActor [weak self] in
@@ -335,18 +285,26 @@ final class PrinterLink: ObservableObject {
         }
     }
 
-    func disconnect() {
+    func stop(keepStatus: Bool = false) {
         mqtt?.stop()
         mqtt = nil
         poller?.stop()
         poller = nil
+        running = false
         connected = false
-        statusText = "Disconnected"
+        if !keepStatus { statusText = "Disconnected" }
+    }
+
+    private func setState(_ s: String) {
+        if s != state {
+            state = s
+            stateChanged = Date()
+        }
     }
 
     // MARK: status
 
-    private static func deepMerge(_ a: inout [String: Any], _ b: [String: Any]) {
+    fileprivate static func deepMerge(_ a: inout [String: Any], _ b: [String: Any]) {
         for (k, v) in b {
             if let vb = v as? [String: Any], var va = a[k] as? [String: Any] {
                 deepMerge(&va, vb)
@@ -358,11 +316,14 @@ final class PrinterLink: ObservableObject {
     }
 
     private func mergeBambu(_ obj: [String: Any]) {
-        PrinterLink.deepMerge(&report, obj)
+        PrinterConnection.deepMerge(&report, obj)
         guard let p = report["print"] as? [String: Any] else { return }
         func int(_ k: String) -> Int? { (p[k] as? NSNumber)?.intValue ?? Int(p[k] as? String ?? "") }
         func dbl(_ k: String) -> Double? { (p[k] as? NSNumber)?.doubleValue ?? Double(p[k] as? String ?? "") }
-        if let s = p["gcode_state"] as? String { state = s == "IDLE" || s.isEmpty ? "IDLE" : s }
+        if let s = p["gcode_state"] as? String {
+            setState(s == "IDLE" || s.isEmpty ? "IDLE" : s)
+            if isBusy { reportedBusyAt = Date() }
+        }
         percent = int("mc_percent") ?? percent
         remainingMinutes = int("mc_remaining_time") ?? remainingMinutes
         layer = int("layer_num") ?? layer
@@ -409,12 +370,13 @@ final class PrinterLink: ObservableObject {
         let curLayer = (info["current_layer"] as? NSNumber)?.intValue ?? 0
         let totLayer = (info["total_layer"] as? NSNumber)?.intValue ?? 0
         switch s {
-        case "printing": state = curLayer > 0 ? "RUNNING" : "PREPARE"
-        case "paused": state = "PAUSE"
-        case "complete": state = "FINISH"
-        case "cancelled", "error": state = "FAILED"
-        default: state = "IDLE"
+        case "printing": setState(curLayer > 0 ? "RUNNING" : "PREPARE")
+        case "paused": setState("PAUSE")
+        case "complete": setState("FINISH")
+        case "cancelled", "error": setState("FAILED")
+        default: setState("IDLE")
         }
+        if isBusy { reportedBusyAt = Date() }
         let wh = obj("webhooks")
         if let ws = wh["state"] as? String, ws != "ready" {
             errorText = (wh["state_message"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "Klipper is \(ws)."
@@ -443,7 +405,7 @@ final class PrinterLink: ObservableObject {
         let exist = ptc["filament_exist"] as? [Any] ?? []
         let vendors = ptc["filament_vendor"] as? [Any] ?? []
         let subs = ptc["filament_sub_type"] as? [Any] ?? []
-        let n = max(1, activeModel?.tools ?? 4)
+        let n = max(1, printer.model?.tools ?? 4)
         var heads: [Toolhead] = []
         for i in 0..<n {
             func at(_ a: [Any]) -> String { i < a.count ? clean(a[i]) : "" }
@@ -465,14 +427,14 @@ final class PrinterLink: ObservableObject {
 
     /// pause, resume or stop the current print
     func control(_ action: String) async throws {
-        guard let p = active, let model = p.model else { throw SlicerEngine.EngineError.message("Add a printer first.") }
+        guard let model = printer.model else { throw SlicerEngine.EngineError.message("Unknown printer model.") }
         if model.isBambu {
             guard let mqtt, mqtt.publish(["print": ["sequence_id": "0", "command": action, "param": ""]]) else {
-                throw SlicerEngine.EngineError.message("The printer isn't connected.")
+                throw SlicerEngine.EngineError.message("The \(printer.name) isn't connected.")
             }
         } else {
-            guard let client = MoonrakerClient(host: p.hostOnly, port: p.port, apiKey: secret(for: p)) else {
-                throw SlicerEngine.EngineError.message("The printer isn't set up.")
+            guard let client = MoonrakerClient(host: printer.hostOnly, port: printer.port, apiKey: secret) else {
+                throw SlicerEngine.EngineError.message("The \(printer.name) isn't set up.")
             }
             try await client.control(action == "stop" ? "cancel" : action)
         }
@@ -533,24 +495,37 @@ final class PrinterLink: ObservableObject {
         return out
     }
 
+    /// Without printer data, filaments take toolheads in order.
+    nonisolated static func inOrder(filaments: [(index: Int, color: String, type: String)], tools: Int) -> [Int: Int] {
+        var out: [Int: Int] = [:]
+        for (i, f) in filaments.enumerated() where i < tools { out[f.index] = i }
+        return out
+    }
+
     // MARK: printing
 
+    /// The name a print gets on the printer (file name and job name start with it).
+    nonisolated static func fileBase(_ jobName: String) -> String {
+        let safe = String(jobName.replacingOccurrences(of: "[^A-Za-z0-9._-]+", with: "_", options: .regularExpression).prefix(60))
+        return safe.isEmpty ? "print" : safe
+    }
+
     func startPrint(file: Data, summary: SliceSummary, jobName: String, mapping: [Int: Int], options: StartOptions) async throws {
-        guard let p = active, let model = p.model else { throw SlicerEngine.EngineError.message("Add a printer first.") }
-        guard connected else { throw SlicerEngine.EngineError.message("The \(model.shortName) isn't connected.") }
-        guard !isBusy else { throw SlicerEngine.EngineError.message("The printer is busy. Wait for the current print to finish.") }
+        let p = printer
+        guard let model = p.model else { throw SlicerEngine.EngineError.message("Unknown printer model.") }
+        guard connected else { throw SlicerEngine.EngineError.message("The \(p.name) isn't connected.") }
+        guard !isBusy else { throw SlicerEngine.EngineError.message("The \(p.name) is busy. Wait for the current print to finish.") }
         if let target = summary.printerId, target != model.id {
             throw SlicerEngine.EngineError.message("This plate was sliced for the \(summary.printer ?? target). Slice it again for the \(model.name).")
         }
-        let safe = String(jobName.replacingOccurrences(of: "[^A-Za-z0-9._-]+", with: "_", options: .regularExpression).prefix(60))
-        let base = safe.isEmpty ? "print" : safe
+        let base = Self.fileBase(jobName)
         let plateId = summary.plateId ?? 1
         uploadProgress = 0
         defer { uploadProgress = nil }
         if model.isBambu {
             try await startBambu(p, file: file, summary: summary, remote: "\(base)_p\(plateId).gcode.3mf", subtask: base, mapping: mapping, options: options)
         } else {
-            guard let client = MoonrakerClient(host: p.hostOnly, port: p.port, apiKey: secret(for: p)) else {
+            guard let client = MoonrakerClient(host: p.hostOnly, port: p.port, apiKey: secret) else {
                 throw SlicerEngine.EngineError.message("Add the printer's IP address.")
             }
             let name = "\(base)_p\(plateId).gcode"
@@ -558,13 +533,15 @@ final class PrinterLink: ObservableObject {
                 Task { @MainActor [weak self] in self?.uploadProgress = f }
             }
             try await client.start(name: name)
-            lastResult = "Sent \(name) to the \(model.shortName)."
+            lastResult = "Sent \(name) to the \(p.name)."
         }
+        // the printer reports the new job within a few seconds; until then don't hand it another one
+        setState("PREPARE")
     }
 
     private func startBambu(_ p: SavedPrinter, file: Data, summary: SliceSummary, remote: String, subtask: String, mapping: [Int: Int], options: StartOptions) async throws {
         guard let session = mqtt else { throw SlicerEngine.EngineError.message("The printer isn't connected.") }
-        guard let code = secret(for: p) else { throw SlicerEngine.EngineError.message("Add the access code in the printer's settings.") }
+        guard let code = Keychain.get(p.secretKey) else { throw SlicerEngine.EngineError.message("Add the access code in the printer's settings.") }
         let host = p.hostOnly
         try await Task.detached(priority: .userInitiated) {
             try FTPS.upload(host: host, code: code, remoteName: remote, data: file) { f in
@@ -605,5 +582,181 @@ final class PrinterLink: ObservableObject {
             throw SlicerEngine.EngineError.message("The upload worked, but the print command didn't go through. Try again.")
         }
         lastResult = "Sent \(remote) to the printer."
+        // ask for a full report shortly, so the state is the printer's own and not our guess
+        DispatchQueue.global().asyncAfter(deadline: .now() + 8) { _ = session.publish(["pushing": ["sequence_id": "0", "command": "pushall"]]) }
+    }
+}
+
+/// All saved printers and their connections. The selected (active) printer is the one the project screen slices for
+/// and prints to; the properties below forward to it so the screens built for one printer keep working.
+@MainActor
+final class PrinterLink: ObservableObject {
+    @Published private(set) var printers: [SavedPrinter] = []
+    @Published private(set) var activeID: String?
+    @Published private(set) var connections: [String: PrinterConnection] = [:]
+    private var relays: [String: AnyCancellable] = [:]
+    private var cameras: [String: PrinterCamera] = [:]
+    private var lookedFor: Set<String> = []   // printers already searched for on the Wi-Fi this session
+    private var started = false
+
+    init() {
+        let s = PrinterStore.load()
+        printers = s.printers
+        activeID = s.active
+        for p in printers { attach(p) }
+    }
+
+    // MARK: the active printer
+
+    var active: SavedPrinter? { printers.first { $0.id == activeID } }
+    var activeModel: PrinterModel? { active?.model }
+    var activeConnection: PrinterConnection? { activeID.flatMap { connections[$0] } }
+    var isConfigured: Bool { active != nil }
+
+    var connected: Bool { activeConnection?.connected ?? false }
+    var statusText: String { activeConnection?.statusText ?? "Add a printer to send prints over Wi-Fi." }
+    var state: String { activeConnection?.state ?? "OFFLINE" }
+    var percent: Int { activeConnection?.percent ?? 0 }
+    var remainingMinutes: Int { activeConnection?.remainingMinutes ?? 0 }
+    var layer: Int { activeConnection?.layer ?? 0 }
+    var totalLayers: Int { activeConnection?.totalLayers ?? 0 }
+    var nozzle: Double { activeConnection?.nozzle ?? 0 }
+    var bed: Double { activeConnection?.bed ?? 0 }
+    var jobName: String { activeConnection?.jobName ?? "" }
+    var printError: Int { activeConnection?.printError ?? 0 }
+    var errorText: String? { activeConnection?.errorText }
+    var trays: [Tray] { activeConnection?.trays ?? [] }
+    var toolheads: [Toolhead] { activeConnection?.toolheads ?? [] }
+    var uploadProgress: Double? { activeConnection?.uploadProgress }
+    var lastResult: String? { activeConnection?.lastResult }
+    var isBusy: Bool { activeConnection?.isBusy ?? false }
+
+    func secret(for p: SavedPrinter) -> String? { Keychain.get(p.secretKey) }
+    func hasSecret(_ p: SavedPrinter) -> Bool { secret(for: p) != nil }
+
+    /// Connections in the order the printers were added.
+    var all: [PrinterConnection] { printers.compactMap { connections[$0.id] } }
+    func connection(_ id: String) -> PrinterConnection? { connections[id] }
+
+    /// A printer's camera (made when first asked for; remade when the printer's address changes).
+    func camera(for id: String) -> PrinterCamera? {
+        guard let p = printers.first(where: { $0.id == id }) else { return nil }
+        if let c = cameras[id], c.matches(p) { return c }
+        let c = PrinterCamera(printer: p)
+        cameras[id] = c
+        return c
+    }
+
+    // MARK: printer list
+
+    private func attach(_ p: SavedPrinter) {
+        let c = PrinterConnection(p)
+        c.onUnreachable = { [weak self] p in self?.lookForMoved(p) }
+        connections[p.id] = c
+        // a change on any printer redraws the screens that show printers
+        relays[p.id] = c.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
+        if started { c.start() }
+    }
+
+    func upsert(_ printer: SavedPrinter, secret: String?) {
+        var p = printer
+        p.host = p.hostOnly
+        p.serial = p.serial.trimmingCharacters(in: .whitespaces).uppercased()
+        p.name = p.name.trimmingCharacters(in: .whitespaces).isEmpty ? (p.model?.name ?? "Printer") : p.name.trimmingCharacters(in: .whitespaces)
+        if let secret {
+            let t = secret.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !t.isEmpty { Keychain.set(t, for: p.secretKey) }
+        }
+        if let i = printers.firstIndex(where: { $0.id == p.id }) {
+            printers[i] = p
+            connections[p.id]?.update(p)
+            if secret != nil { connections[p.id]?.connect() }
+        } else {
+            printers.append(p)
+            attach(p)
+            connections[p.id]?.start()
+        }
+        if activeID == nil { activeID = p.id }
+        persist()
+    }
+
+    func remove(_ p: SavedPrinter) {
+        printers.removeAll { $0.id == p.id }
+        connections[p.id]?.stop()
+        connections[p.id] = nil
+        relays[p.id] = nil
+        cameras[p.id] = nil
+        Keychain.delete(p.secretKey)
+        if activeID == p.id { activeID = printers.first?.id }
+        persist()
+    }
+
+    func select(_ id: String) {
+        guard id != activeID, printers.contains(where: { $0.id == id }) else { return }
+        activeID = id
+        persist()
+    }
+
+    private func persist() { PrinterStore.save(printers, active: activeID) }
+
+    /// The saved printer a found one is (same serial number, or same address).
+    func saved(matching f: FoundPrinter) -> SavedPrinter? {
+        printers.first { (!f.serial.isEmpty && $0.serial == f.serial) || $0.hostOnly == f.host }
+    }
+
+    /// The printer isn't answering at its address: once per session, search the Wi-Fi for its serial number
+    /// in case the router gave it a new address.
+    private func lookForMoved(_ p: SavedPrinter) {
+        guard !p.serial.isEmpty, !lookedFor.contains(p.id) else { return }
+        lookedFor.insert(p.id)
+        Task { [weak self] in
+            let found = await PrinterDiscovery.search()
+            guard let self else { return }
+            for f in found where f.serial == p.serial { self.follow(f) }
+        }
+    }
+
+    /// A saved Bambu printer turned up at a new address (the router handed out another one): follow it.
+    func follow(_ f: FoundPrinter) {
+        guard !f.serial.isEmpty,
+              let i = printers.firstIndex(where: { $0.serial == f.serial && $0.hostOnly != f.host }) else { return }
+        printers[i].host = f.host
+        persist()
+        connections[printers[i].id]?.update(printers[i])
+    }
+
+    // MARK: connections
+
+    /// Connect to every saved printer.
+    func start() {
+        started = true
+        for c in all { c.start() }
+    }
+
+    /// Reconnect the active printer.
+    func reconnect() { activeConnection?.connect() }
+
+    func disconnect() {
+        for c in all { c.stop() }
+    }
+
+    // MARK: the active printer's actions
+
+    func control(_ action: String) async throws {
+        guard let c = activeConnection else { throw SlicerEngine.EngineError.message("Add a printer first.") }
+        try await c.control(action)
+    }
+
+    func send(_ command: String) { activeConnection?.send(command) }
+
+    func suggestMapping(for filaments: [SlicedFilament]) -> [Int: Int] { activeConnection?.suggestMapping(for: filaments) ?? [:] }
+
+    func suggestToolMap(filaments: [(index: Int, color: String, type: String)], tools: Int) -> [Int: Int] {
+        activeConnection?.suggestToolMap(filaments: filaments, tools: tools) ?? PrinterConnection.inOrder(filaments: filaments, tools: tools)
+    }
+
+    func startPrint(file: Data, summary: SliceSummary, jobName: String, mapping: [Int: Int], options: StartOptions) async throws {
+        guard let c = activeConnection else { throw SlicerEngine.EngineError.message("Add a printer first.") }
+        try await c.startPrint(file: file, summary: summary, jobName: jobName, mapping: mapping, options: options)
     }
 }
