@@ -81,6 +81,10 @@ jobs:
         continue-on-error: true
         timeout-minutes: 10
         run: ci/simulator.sh discover
+      - name: Several printers, cameras and the print queue (stand-in printers on the runner)
+        continue-on-error: true
+        timeout-minutes: 20
+        run: ci/simulator.sh fleet
       - name: Publish the build errors to the ci-logs branch
         if: failure() && github.event_name == 'push'
         run: |

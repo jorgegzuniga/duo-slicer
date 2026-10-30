@@ -5,6 +5,7 @@
 #   ci/simulator.sh inner         the iPhone Duo's unfolded layouts at the inner screen's size, on a 13-inch iPad -> shots/duo-inner-*
 #   ci/simulator.sh unfold        try to unfold the iPhone Duo simulator through Device Hub and shoot its inner screen
 #   ci/simulator.sh discover      Add printer's Wi-Fi search against stand-in printers on the runner -> shots/discover-*
+#   ci/simulator.sh fleet         three stand-in printers: printers list, cameras, the print queue printing -> shots/fleet-*
 set -u
 APP="build/dd/Build/Products/Debug-iphonesimulator/Duo Slicer.app"
 BUNDLE=Com.jorgegzuniga.duoslicer
@@ -218,7 +219,9 @@ discover)
   b=127.0.0.3
   sudo ifconfig lo0 alias "$a" up >> "$P" 2>&1
   sudo ifconfig lo0 alias "$b" up >> "$P" 2>&1
+  pkill -f fake_printers.py 2>/dev/null; sleep 1
   python3 ci/fake_printers.py "$a" "$b" > shots/fake-printers.txt 2>&1 &
+  fakes=$!
   sleep 5
   { echo "stand-ins: P1S at $a, U1 at $b"; curl -s -m 3 "http://$b:7125/printer/objects/list"; echo
     echo "== runner network"; ifconfig en0 | grep "inet "; netstat -anv -p tcp | grep LISTEN | grep -E "\.8883|\.7125"
@@ -230,6 +233,7 @@ discover)
   DISPLAYS=$(screens shots/duo-screens.txt | awk '{print $1}' | xargs)
   WAIT=30 shot discover "$udid" add-printer -DuoDemo YES -DuoDemoHome YES -DuoDemoAddPrinter YES -DuoDemoScanHosts "$a,$b"
   echo "connections the stand-ins saw: $(grep -c " from " shots/fake-printers.txt)" >> "$P"
+  kill "$fakes" 2>/dev/null
   ;;
 claude)
   (cd relay && npm ci --no-audit --no-fund > /dev/null 2>&1 && npx wrangler dev --port 8787 --ip 127.0.0.1 > ../shots/wrangler.log 2>&1) &
@@ -245,5 +249,38 @@ claude)
   rc=$?
   limit 45 xcrun simctl io "$udid" screenshot shots/claude-after.png > /dev/null 2>&1 || true
   exit $rc
+  ;;
+fleet)
+  # Three stand-in printers on loopback addresses (ci/fake_printers.py): a P1S (MQTT, FTPS upload, JPEG camera), a
+  # Snapmaker U1 (Moonraker, uploads, camera snapshots) and an X1 Carbon (MQTT, RTSPS H.264 camera). Shots of the
+  # printers, each printer's camera, the print queue sending plates to them, and the Print panel while the U1 prints.
+  P=shots/fleet.txt
+  : > "$P"
+  for ip in 127.0.0.2 127.0.0.3 127.0.0.4; do sudo ifconfig lo0 alias "$ip" up >> "$P" 2>&1; done
+  pkill -f fake_printers.py 2>/dev/null; sleep 1
+  python3 ci/fake_printers.py 127.0.0.2 127.0.0.3 127.0.0.4 > shots/fleet-stand-ins.txt 2>&1 &
+  fakes=$!
+  sleep 6
+  debug() { curl -s -m 5 -X POST "http://127.0.0.3:7125/debug/print?printer=$1&name=$2" >> "$P" 2>&1; echo >> "$P"; }
+  udid=$(pick "^iPhone Duo$")
+  [ -z "$udid" ] && udid=$(pick "^iPhone 1[0-9] Pro$")
+  boot "$udid"
+  limit 60 xcrun simctl io "$udid" enumerate > shots/duo-screens.txt 2>&1 || true
+  DISPLAYS=$(screens shots/duo-screens.txt | awk '{print $1}' | xargs)
+  PR="bambu-p1s@127.0.0.2,snapmaker-u1@127.0.0.3,bambu-x1c@127.0.0.4"
+  debug P1S Benchy
+  WAIT=22 shot fleet "$udid" printers -DuoDemo YES -DuoDemoHome YES -DuoDemoPrinters "$PR" -DuoDemoSheet printers
+  WAIT=22 shot fleet "$udid" p1s -DuoDemo YES -DuoDemoHome YES -DuoDemoPrinters "$PR" -DuoDemoSheet printers -DuoDemoOpenPrinter bambu-p1s
+  WAIT=26 shot fleet "$udid" x1c -DuoDemo YES -DuoDemoHome YES -DuoDemoPrinters "$PR" -DuoDemoSheet printers -DuoDemoOpenPrinter bambu-x1c
+  WAIT=22 shot fleet "$udid" u1 -DuoDemo YES -DuoDemoHome YES -DuoDemoPrinters "$PR" -DuoDemoSheet printers -DuoDemoOpenPrinter snapmaker-u1
+  # the queue: filled from the demo project (a plate for the P1S, two for any U1) and started with every bed clear
+  WAIT=45 shot fleet "$udid" queue-printing -DuoDemo YES -DuoDemoPrinter snapmaker-u1 -DuoDemoPrinters "$PR" -DuoDemoQueue YES -DuoDemoSheet queue
+  sleep 55
+  for d in ${DISPLAYS:-1}; do snap "$udid" "shots/fleet-queue-done-screen$d.png" --display="$d" && echo "shot fleet-queue-done (screen $d)"; done
+  # the Print panel while the U1 prints: its camera shows on the panel
+  debug U1 Coasters
+  WAIT=22 shot fleet "$udid" print-panel -DuoDemo YES -DuoDemoPrinter snapmaker-u1 -DuoDemoPrinters "$PR" -DuoDemoPanel print
+  { echo "== what the stand-ins saw"; grep -E "login|upload|print |start |WebSocket camera|RTSP (PLAY|frame)|camera frame" shots/fleet-stand-ins.txt | head -80; } >> "$P"
+  kill "$fakes" 2>/dev/null
   ;;
 esac
