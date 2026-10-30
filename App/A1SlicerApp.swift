@@ -286,7 +286,7 @@ struct PrinterStatusRow: View {
         guard printer.isConfigured else { return "Find your Bambu Lab printer or Snapmaker U1 on this Wi-Fi" }
         guard printer.connected else { return printer.statusText }
         switch printer.state {
-        case "RUNNING": return "Printing \(printer.percent)% · \(formatDuration(Double(printer.remainingMinutes) * 60)) left"
+        case "RUNNING": return "Printing \(printer.percent)%\(timeLeft(minutes: printer.remainingMinutes))"
         case "PAUSE": return "Paused at \(printer.percent)%"
         case "PREPARE": return "Preparing: heating and leveling"
         case "FINISH": return "Ready · last print finished"

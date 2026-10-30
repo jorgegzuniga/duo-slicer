@@ -4,25 +4,34 @@ import Security
 import SwiftUI
 
 enum Keychain {
+    /// Values the Keychain wouldn't take (an unsigned simulator build has no Keychain), kept for this run only.
+    private static let memory = Locked<[String: String]>([:])
+
     static func set(_ value: String, for key: String) {
         let base: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrAccount as String: key]
         SecItemDelete(base as CFDictionary)
         var add = base
         add[kSecValueData as String] = Data(value.utf8)
         add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
-        SecItemAdd(add as CFDictionary, nil)
+        let stored = SecItemAdd(add as CFDictionary, nil) == errSecSuccess
+        var m = memory.value
+        m[key] = stored ? nil : value
+        memory.value = m
     }
 
     static func delete(_ key: String) {
         let base: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrAccount as String: key]
         SecItemDelete(base as CFDictionary)
+        var m = memory.value
+        m[key] = nil
+        memory.value = m
     }
 
     static func get(_ key: String) -> String? {
         let q: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrAccount as String: key,
                                 kSecReturnData as String: true, kSecMatchLimit as String: kSecMatchLimitOne]
         var out: CFTypeRef?
-        guard SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess, let d = out as? Data else { return nil }
+        guard SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess, let d = out as? Data else { return memory.value[key] }
         return String(data: d, encoding: .utf8)
     }
 }
@@ -155,6 +164,12 @@ struct Toolhead: Identifiable, Hashable {
         guard loaded else { return "Empty" }
         let name = [vendor, type, subType].filter { !$0.isEmpty }.reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
         return name.joined(separator: " ")
+    }
+    /// Without the brand, for tight spaces: "PLA Basic".
+    var shortSummary: String {
+        guard loaded else { return "Empty" }
+        let name = [type, subType].filter { !$0.isEmpty }.reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
+        return name.isEmpty ? summary : name.joined(separator: " ")
     }
 }
 

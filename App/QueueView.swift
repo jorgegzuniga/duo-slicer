@@ -252,7 +252,7 @@ struct QueueJobRow: View {
             guard let c = connection else { return "Printing" }
             guard c.connected else { return "Printing on \(c.printer.name) (not connected right now)" }
             switch c.state {
-            case "RUNNING": return "Printing on \(c.printer.name) · \(c.percent)% · \(formatDuration(Double(c.remainingMinutes) * 60)) left"
+            case "RUNNING": return "Printing on \(c.printer.name) · \(c.percent)%\(timeLeft(minutes: c.remainingMinutes))"
             case "PAUSE": return "Paused on \(c.printer.name) at \(c.percent)%"
             default: return "Starting on \(c.printer.name)…"
             }

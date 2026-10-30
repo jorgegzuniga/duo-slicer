@@ -219,9 +219,9 @@ discover)
   b=127.0.0.3
   sudo ifconfig lo0 alias "$a" up >> "$P" 2>&1
   sudo ifconfig lo0 alias "$b" up >> "$P" 2>&1
-  pkill -f fake_printers.py 2>/dev/null; sleep 1
-  python3 ci/fake_printers.py "$a" "$b" > shots/fake-printers.txt 2>&1 &
-  fakes=$!
+  sudo pkill -f "[f]ake_printers.py" 2>/dev/null; sleep 1
+  # as root: the stand-ins also listen on ports below 1024 (FTPS 990, RTSPS 322)
+  sudo python3 ci/fake_printers.py "$a" "$b" > shots/fake-printers.txt 2>&1 &
   sleep 5
   { echo "stand-ins: P1S at $a, U1 at $b"; curl -s -m 3 "http://$b:7125/printer/objects/list"; echo
     echo "== runner network"; ifconfig en0 | grep "inet "; netstat -anv -p tcp | grep LISTEN | grep -E "\.8883|\.7125"
@@ -233,7 +233,7 @@ discover)
   DISPLAYS=$(screens shots/duo-screens.txt | awk '{print $1}' | xargs)
   WAIT=30 shot discover "$udid" add-printer -DuoDemo YES -DuoDemoHome YES -DuoDemoAddPrinter YES -DuoDemoScanHosts "$a,$b"
   echo "connections the stand-ins saw: $(grep -c " from " shots/fake-printers.txt)" >> "$P"
-  kill "$fakes" 2>/dev/null
+  sudo pkill -f "[f]ake_printers.py" 2>/dev/null
   ;;
 claude)
   (cd relay && npm ci --no-audit --no-fund > /dev/null 2>&1 && npx wrangler dev --port 8787 --ip 127.0.0.1 > ../shots/wrangler.log 2>&1) &
@@ -257,9 +257,8 @@ fleet)
   P=shots/fleet.txt
   : > "$P"
   for ip in 127.0.0.2 127.0.0.3 127.0.0.4; do sudo ifconfig lo0 alias "$ip" up >> "$P" 2>&1; done
-  pkill -f fake_printers.py 2>/dev/null; sleep 1
-  python3 ci/fake_printers.py 127.0.0.2 127.0.0.3 127.0.0.4 > shots/fleet-stand-ins.txt 2>&1 &
-  fakes=$!
+  sudo pkill -f "[f]ake_printers.py" 2>/dev/null; sleep 1
+  sudo python3 ci/fake_printers.py 127.0.0.2 127.0.0.3 127.0.0.4 > shots/fleet-stand-ins.txt 2>&1 &
   sleep 6
   debug() { curl -s -m 5 -X POST "http://127.0.0.3:7125/debug/print?printer=$1&name=$2" >> "$P" 2>&1; echo >> "$P"; }
   udid=$(pick "^iPhone Duo$")
@@ -284,7 +283,7 @@ fleet)
   # the Print panel while the U1 prints: its camera shows on the panel
   debug U1 Coasters
   WAIT=22 shot fleet "$udid" print-panel -DuoDemo YES -DuoDemoPrinter snapmaker-u1 -DuoDemoPrinters "$PR" -DuoDemoPanel print
-  { echo "== what the stand-ins saw"; grep -E "login|upload|print |start |WebSocket camera|RTSP (PLAY|frame)|camera frame" shots/fleet-stand-ins.txt | head -80; } >> "$P"
-  kill "$fakes" 2>/dev/null
+  { echo "== what the stand-ins saw"; grep -E "listen|login|upload|print |start |RTSP (PLAY|frame)|camera frame" shots/fleet-stand-ins.txt | head -80; } >> "$P"
+  sudo pkill -f "[f]ake_printers.py" 2>/dev/null
   ;;
 esac

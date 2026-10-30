@@ -143,7 +143,7 @@ struct PrinterCard: View {
         switch c.state {
         case "RUNNING":
             let job = c.jobName.isEmpty ? "" : " \(c.jobName)"
-            return "Printing\(job) · \(c.percent)% · \(formatDuration(Double(c.remainingMinutes) * 60)) left"
+            return "Printing\(job) · \(c.percent)%\(timeLeft(minutes: c.remainingMinutes))"
         case "PAUSE": return "Paused at \(c.percent)%"
         case "PREPARE": return "Preparing: heating and leveling"
         case "FINISH": return "Finished · take the print off the bed"

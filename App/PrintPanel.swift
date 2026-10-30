@@ -234,7 +234,7 @@ struct ToolheadSection: View {
     }
 
     func headLabel(_ t: Int) -> String {
-        if let h = printer.toolheads.first(where: { $0.id == t }) { return "Head \(t + 1) · \(h.summary)" }
+        if let h = printer.toolheads.first(where: { $0.id == t }) { return "Head \(t + 1) · \(h.shortSummary)" }
         return "Head \(t + 1)"
     }
 

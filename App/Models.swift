@@ -176,6 +176,11 @@ func colorDistance(_ a: String, _ b: String) -> Double {
     return ((x.0 - y.0) * (x.0 - y.0) + (x.1 - y.1) * (x.1 - y.1) + (x.2 - y.2) * (x.2 - y.2)).squareRoot()
 }
 
+/// " · 1h 20m left", or nothing when the printer doesn't know (or it's under a minute).
+func timeLeft(minutes: Int) -> String {
+    minutes > 0 ? " · \(formatDuration(Double(minutes) * 60)) left" : ""
+}
+
 func formatDuration(_ seconds: Double) -> String {
     let s = Int(seconds.rounded())
     let h = s / 3600, m = (s % 3600) / 60
