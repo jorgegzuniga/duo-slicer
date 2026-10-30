@@ -1,0 +1,65 @@
+timed out after 60s: xcrun simctl status_bar 3CE49892-DF52-49A7-9D5F-68E49A7DD048 override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3
+timed out after 300s: xcrun simctl install 3CE49892-DF52-49A7-9D5F-68E49A7DD048 build/dd/Build/Products/Debug-iphonesimulator/Duo Slicer.app
+An error was encountered processing the command (domain=FBSOpenApplicationServiceErrorDomain, code=4):
+Simulator device failed to launch Com.jorgegzuniga.duoslicer.
+Underlying error (domain=FBSOpenApplicationServiceErrorDomain, code=4):
+	The request to open "Com.jorgegzuniga.duoslicer" failed.
+Detected file type from extension: PNG
+Note: No display specified. Defaulting to display: DB0D4AA3-AA0F-4BB7-A9CD-14C86A0552B9 (screenID: 1, name: LCD)
+Wrote screenshot to: /Users/runner/work/duo-slicer/duo-slicer/shots/duo-inner-wide-plate.png
+An error was encountered processing the command (domain=FBSOpenApplicationServiceErrorDomain, code=4):
+Simulator device failed to launch Com.jorgegzuniga.duoslicer.
+Underlying error (domain=FBSOpenApplicationServiceErrorDomain, code=4):
+	The request to open "Com.jorgegzuniga.duoslicer" failed.
+Detected file type from extension: PNG
+Note: No display specified. Defaulting to display: DB0D4AA3-AA0F-4BB7-A9CD-14C86A0552B9 (screenID: 1, name: LCD)
+Wrote screenshot to: /Users/runner/work/duo-slicer/duo-slicer/shots/duo-inner-wide-preview.png
+An error was encountered processing the command (domain=FBSOpenApplicationServiceErrorDomain, code=4):
+Simulator device failed to launch Com.jorgegzuniga.duoslicer.
+Underlying error (domain=FBSOpenApplicationServiceErrorDomain, code=4):
+	The request to open "Com.jorgegzuniga.duoslicer" failed.
+Detected file type from extension: PNG
+Note: No display specified. Defaulting to display: DB0D4AA3-AA0F-4BB7-A9CD-14C86A0552B9 (screenID: 1, name: LCD)
+Wrote screenshot to: /Users/runner/work/duo-slicer/duo-slicer/shots/duo-inner-wide-u1-print.png
+An error was encountered processing the command (domain=FBSOpenApplicationServiceErrorDomain, code=4):
+Simulator device failed to launch Com.jorgegzuniga.duoslicer.
+Underlying error (domain=FBSOpenApplicationServiceErrorDomain, code=4):
+	The request to open "Com.jorgegzuniga.duoslicer" failed.
+Detected file type from extension: PNG
+Note: No display specified. Defaulting to display: DB0D4AA3-AA0F-4BB7-A9CD-14C86A0552B9 (screenID: 1, name: LCD)
+Wrote screenshot to: /Users/runner/work/duo-slicer/duo-slicer/shots/duo-inner-wide-settings.png
+An error was encountered processing the command (domain=FBSOpenApplicationServiceErrorDomain, code=4):
+Simulator device failed to launch Com.jorgegzuniga.duoslicer.
+Underlying error (domain=FBSOpenApplicationServiceErrorDomain, code=4):
+	The request to open "Com.jorgegzuniga.duoslicer" failed.
+Detected file type from extension: PNG
+Note: No display specified. Defaulting to display: DB0D4AA3-AA0F-4BB7-A9CD-14C86A0552B9 (screenID: 1, name: LCD)
+Wrote screenshot to: /Users/runner/work/duo-slicer/duo-slicer/shots/duo-inner-wide-home.png
+An error was encountered processing the command (domain=FBSOpenApplicationServiceErrorDomain, code=4):
+Simulator device failed to launch Com.jorgegzuniga.duoslicer.
+Underlying error (domain=FBSOpenApplicationServiceErrorDomain, code=4):
+	The request to open "Com.jorgegzuniga.duoslicer" failed.
+Detected file type from extension: PNG
+Note: No display specified. Defaulting to display: DB0D4AA3-AA0F-4BB7-A9CD-14C86A0552B9 (screenID: 1, name: LCD)
+Wrote screenshot to: /Users/runner/work/duo-slicer/duo-slicer/shots/duo-inner-tall-plate.png
+An error was encountered processing the command (domain=FBSOpenApplicationServiceErrorDomain, code=4):
+Simulator device failed to launch Com.jorgegzuniga.duoslicer.
+Underlying error (domain=FBSOpenApplicationServiceErrorDomain, code=4):
+	The request to open "Com.jorgegzuniga.duoslicer" failed.
+Detected file type from extension: PNG
+Note: No display specified. Defaulting to display: DB0D4AA3-AA0F-4BB7-A9CD-14C86A0552B9 (screenID: 1, name: LCD)
+Wrote screenshot to: /Users/runner/work/duo-slicer/duo-slicer/shots/duo-inner-tall-preview.png
+An error was encountered processing the command (domain=FBSOpenApplicationServiceErrorDomain, code=4):
+Simulator device failed to launch Com.jorgegzuniga.duoslicer.
+Underlying error (domain=FBSOpenApplicationServiceErrorDomain, code=4):
+	The request to open "Com.jorgegzuniga.duoslicer" failed.
+Detected file type from extension: PNG
+Note: No display specified. Defaulting to display: DB0D4AA3-AA0F-4BB7-A9CD-14C86A0552B9 (screenID: 1, name: LCD)
+Wrote screenshot to: /Users/runner/work/duo-slicer/duo-slicer/shots/duo-inner-tall-home.png
+An error was encountered processing the command (domain=FBSOpenApplicationServiceErrorDomain, code=4):
+Simulator device failed to launch Com.jorgegzuniga.duoslicer.
+Underlying error (domain=FBSOpenApplicationServiceErrorDomain, code=4):
+	The request to open "Com.jorgegzuniga.duoslicer" failed.
+Detected file type from extension: PNG
+Note: No display specified. Defaulting to display: DB0D4AA3-AA0F-4BB7-A9CD-14C86A0552B9 (screenID: 1, name: LCD)
+Wrote screenshot to: /Users/runner/work/duo-slicer/duo-slicer/shots/duo-inner-regular-plate.png

@@ -1,0 +1,9 @@
+duo-inner-wide-plate: 
+duo-inner-wide-preview: 
+duo-inner-wide-u1-print: 
+duo-inner-wide-settings: 
+duo-inner-wide-home: 
+duo-inner-tall-plate: 
+duo-inner-tall-preview: 
+duo-inner-tall-home: 
+duo-inner-regular-plate: 
