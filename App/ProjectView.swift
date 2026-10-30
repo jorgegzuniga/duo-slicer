@@ -36,7 +36,6 @@ enum ProjectLayout: Equatable {
 
 struct ProjectView: View {
     @EnvironmentObject var model: AppModel
-    @EnvironmentObject var printer: PrinterLink
     @State private var panel: Panel = .plate
     @State private var pickFace = false
     @State private var shareURL: URL?

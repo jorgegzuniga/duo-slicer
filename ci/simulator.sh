@@ -268,14 +268,18 @@ fleet)
   limit 60 xcrun simctl io "$udid" enumerate > shots/duo-screens.txt 2>&1 || true
   DISPLAYS=$(screens shots/duo-screens.txt | awk '{print $1}' | xargs)
   PR="bambu-p1s@127.0.0.2,snapmaker-u1@127.0.0.3,bambu-x1c@127.0.0.4"
+  # stand-in prints take about 50 s; the U1 stays free for the queue run below
   debug P1S Benchy
   WAIT=22 shot fleet "$udid" printers -DuoDemo YES -DuoDemoHome YES -DuoDemoPrinters "$PR" -DuoDemoSheet printers
+  debug P1S Benchy
   WAIT=22 shot fleet "$udid" p1s -DuoDemo YES -DuoDemoHome YES -DuoDemoPrinters "$PR" -DuoDemoSheet printers -DuoDemoOpenPrinter bambu-p1s
+  debug X1C Gearbox
   WAIT=26 shot fleet "$udid" x1c -DuoDemo YES -DuoDemoHome YES -DuoDemoPrinters "$PR" -DuoDemoSheet printers -DuoDemoOpenPrinter bambu-x1c
   WAIT=22 shot fleet "$udid" u1 -DuoDemo YES -DuoDemoHome YES -DuoDemoPrinters "$PR" -DuoDemoSheet printers -DuoDemoOpenPrinter snapmaker-u1
+  sleep 20
   # the queue: filled from the demo project (a plate for the P1S, two for any U1) and started with every bed clear
   WAIT=45 shot fleet "$udid" queue-printing -DuoDemo YES -DuoDemoPrinter snapmaker-u1 -DuoDemoPrinters "$PR" -DuoDemoQueue YES -DuoDemoSheet queue
-  sleep 55
+  sleep 60
   for d in ${DISPLAYS:-1}; do snap "$udid" "shots/fleet-queue-done-screen$d.png" --display="$d" && echo "shot fleet-queue-done (screen $d)"; done
   # the Print panel while the U1 prints: its camera shows on the panel
   debug U1 Coasters

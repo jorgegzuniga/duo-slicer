@@ -9,6 +9,7 @@ struct PrintersView: View {
     @State private var adding = false
     @State private var showQueue = false
     @State private var path: [String] = []
+    @State private var stopping: PrinterConnection?
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -26,6 +27,20 @@ struct PrintersView: View {
                             if c.id != printer.activeID {
                                 Button("Use") { printer.select(c.id) }.tint(Theme.accent)
                             }
+                        }
+                        .contextMenu {
+                            if c.isBusy {
+                                if c.state == "PAUSE" {
+                                    Button { c.send("resume") } label: { Label("Resume", systemImage: "play.fill") }
+                                } else {
+                                    Button { c.send("pause") } label: { Label("Pause", systemImage: "pause.fill") }
+                                }
+                                Button(role: .destructive) { stopping = c } label: { Label("Stop print", systemImage: "stop.fill") }
+                            }
+                            if c.id != printer.activeID {
+                                Button { printer.select(c.id) } label: { Label("Slice for this printer", systemImage: "checkmark.circle") }
+                            }
+                            Button { c.connect() } label: { Label("Reconnect", systemImage: "arrow.clockwise") }
                         }
                     }
                     Button { adding = true } label: { Label("Add printer", systemImage: "plus") }
@@ -64,6 +79,16 @@ struct PrintersView: View {
             .sheet(item: $editing) { p in PrinterEditor(printer: p) }
             .sheet(isPresented: $adding) { AddPrinterView() }
             .sheet(isPresented: $showQueue) { QueueView() }
+            .confirmationDialog("Stop the print on \(stopping?.printer.name ?? "the printer")?",
+                                isPresented: Binding(get: { stopping != nil }, set: { if !$0 { stopping = nil } }),
+                                titleVisibility: .visible) {
+                Button("Stop print", role: .destructive) {
+                    stopping?.send("stop")
+                    stopping = nil
+                }
+            } message: {
+                Text("It can't be resumed after stopping.")
+            }
             .onAppear {
                 // screenshots: open one printer's page
                 if let m = DemoMode.openPrinter, let c = printer.all.first(where: { $0.printer.modelID == m }) { path = [c.id] }

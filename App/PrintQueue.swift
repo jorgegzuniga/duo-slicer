@@ -311,6 +311,12 @@ final class PrintQueue: ObservableObject {
             guard let job = next(for: c) else { continue }
             preparing.insert(c.id)
             ready.remove(c.id)
+            // claimed now, so another free printer of the same model doesn't take the same job in this pass
+            update(job.id) {
+                $0.status = .slicing
+                $0.message = nil
+                $0.printedOn = c.id
+            }
             Task { await self.run(job.id, on: c) }
         }
         if !hasWork {
