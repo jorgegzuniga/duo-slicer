@@ -37,6 +37,8 @@ final class PrinterCamera: ObservableObject {
     @Published private(set) var status = "Connecting to the camera…"
     @Published private(set) var live = false
     @Published private(set) var lastFrameAt: Date?
+    /// The last try failed (the message says why); cleared by the next picture.
+    @Published private(set) var trouble = false
 
     private let printer: SavedPrinter
     private var source: CameraSource?
@@ -82,19 +84,24 @@ final class PrinterCamera: ObservableObject {
         case .moonraker: s = MoonrakerSnapshotSource(host: host, port: printer.port, apiKey: code.isEmpty ? nil : code)
         }
         source = s
-        status = "Connecting to the camera…"
+        // while retrying after a failure, keep showing why it failed
+        if !trouble { status = "Connecting to the camera…" }
         s.start(onFrame: { [weak self] img in
             Task { @MainActor in
                 guard let self, self.source === s else { return }
                 self.frame = img
                 self.live = true
+                self.trouble = false
                 self.lastFrameAt = Date()
             }
         }, onStatus: { [weak self] text, ok in
             Task { @MainActor in
                 guard let self, self.source === s else { return }
                 self.status = text
-                if !ok { self.failed() }
+                if !ok {
+                    self.trouble = true
+                    self.failed()
+                }
             }
         })
     }
@@ -135,6 +142,21 @@ final class PrinterCamera: ObservableObject {
             try? await Task.sleep(nanoseconds: 250_000_000)
         }
         return nil
+    }
+}
+
+/// Why a camera connection failed, in a few words.
+func cameraReason(_ e: NWError) -> String {
+    switch e {
+    case .posix(let code):
+        switch code {
+        case .ECONNREFUSED: return "it refused the connection"
+        case .ETIMEDOUT, .EHOSTUNREACH, .ENETUNREACH, .EHOSTDOWN: return "it didn't answer"
+        default: return "the connection failed"
+        }
+    case .tls: return "the secure connection failed"
+    case .dns: return "its address couldn't be found"
+    default: return "the connection failed"
     }
 }
 
@@ -182,7 +204,7 @@ final class BambuJPEGSource: CameraSource, @unchecked Sendable {
                 onStatus("Live", true)
                 self.receive(c, onFrame: onFrame, onStatus: onStatus)
             case .waiting(let e), .failed(let e):
-                onStatus("Couldn't reach the camera (\(e.localizedDescription)).", false)
+                onStatus("Couldn't reach the camera: \(cameraReason(e)).", false)
                 c.cancel()
             default:
                 break
@@ -386,7 +408,7 @@ final class RTSPSource: CameraSource, @unchecked Sendable {
                 self.receive(c)
                 self.describe()
             case .waiting(let e), .failed(let e):
-                self.fail("Couldn't reach the camera (\(e.localizedDescription)). On X1 and H2 printers, turn on LAN Mode Liveview.")
+                self.fail("Couldn't reach the camera: \(cameraReason(e)). On X1, H2 and P2 printers, turn on LAN Mode Liveview.")
             default:
                 break
             }
@@ -721,7 +743,7 @@ private struct CameraPicture: View {
             }
             if !camera.live || camera.frame == nil {
                 VStack(spacing: 8) {
-                    if camera.available && camera.frame == nil { ProgressView().tint(.white) }
+                    if camera.available && camera.frame == nil && !camera.trouble { ProgressView().tint(.white) }
                     Text(camera.status).font(.footnote).foregroundStyle(.white.opacity(0.85)).multilineTextAlignment(.center).padding(.horizontal)
                 }
             }
