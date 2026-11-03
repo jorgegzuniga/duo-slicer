@@ -33,11 +33,6 @@ struct A1SlicerApp: App {
     }
 }
 
-enum Theme {
-    static let accent = Color(red: 0.04, green: 0.43, blue: 0.44)
-    static let bed = Color(red: 0.23, green: 0.25, blue: 0.27)
-}
-
 extension UTType {
     static let threeMF = UTType(importedAs: "com.jorgegzuniga.duoslicer.3mf", conformingTo: .data)
 }
@@ -127,19 +122,19 @@ struct HomeView: View {
                 switch ProjectLayout(size: geo.size, fold: fold) {
                 case .split(let left, let gap) where gap > 0:
                     HStack(spacing: 0) {
-                        List { titleRow; projectSections }.frame(width: left)
+                        column { header; projectSections }.frame(width: left)
                         FoldGap(vertical: true, background: Color(.systemGroupedBackground)).frame(width: gap)
-                        List { deviceSections }
+                        column { deviceSections }
                     }
                 case .stacked(let top, let gap):
                     VStack(spacing: 0) {
-                        List { titleRow; projectSections }.frame(height: top)
+                        column { header; projectSections }.frame(height: top)
                         FoldGap(vertical: false, background: Color(.systemGroupedBackground)).frame(height: gap)
-                        List { deviceSections }
+                        column { deviceSections }
                     }
                 default:
-                    List {
-                        titleRow
+                    column {
+                        header
                         projectSections
                         deviceSections
                     }
@@ -147,7 +142,7 @@ struct HomeView: View {
             }
             .background(Color(.systemGroupedBackground))
             .background(FoldReader(fold: $fold))
-            // the title is the first row of the list (a bar-wide title would sit on the iPhone Duo's crease)
+            // the title is part of the page (a bar-wide title would sit on the iPhone Duo's crease)
             .toolbar(.hidden, for: .navigationBar)
             .navigationTitle("Duo Slicer")
             .fileImporter(isPresented: $importing, allowedContentTypes: [.threeMF, .zip, .data]) { result in
@@ -168,78 +163,158 @@ struct HomeView: View {
         }
     }
 
-    var titleRow: some View {
-        Text("Duo Slicer")
-            .font(.largeTitle.bold())
-            .listRowBackground(Color.clear)
-            .listRowInsets(EdgeInsets(top: 8, leading: 4, bottom: 0, trailing: 0))
-            .accessibilityAddTraits(.isHeader)
+    func column<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) { content() }
+                .padding(.horizontal)
+                .padding(.vertical, 12)
+        }
+    }
+
+    var header: some View {
+        HStack(spacing: 12) {
+            AppMark(size: 46)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Duo Slicer").font(.largeTitle.bold()).accessibilityAddTraits(.isHeader)
+                Text("Slicing for the \(model.target.name)").font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
+            }
+        }
+        .padding(.top, 4)
     }
 
     @ViewBuilder var projectSections: some View {
-        Section {
-            Button {
-                importing = true
-            } label: {
-                Label("Open a 3MF project", systemImage: "square.and.arrow.down")
-                    .font(.headline)
-            }
-            .keyboardShortcut("o", modifiers: .command)
-            Text("Pick a .3mf from Files, share one to Duo Slicer from MakerWorld, Safari or Mail, or drag one in.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-        }
-        if !model.recents.isEmpty {
-            Section("Recent projects") {
-                ForEach(model.recents, id: \.self) { url in
-                    Button {
-                        Task { await model.open(url: url) }
-                    } label: {
-                        Label(url.deletingPathExtension().lastPathComponent, systemImage: "cube.transparent")
-                    }
+        Button {
+            importing = true
+        } label: {
+            HStack(spacing: 14) {
+                Image(systemName: "plus.square.on.square")
+                    .font(.system(size: 26, weight: .semibold))
+                    .frame(width: 52, height: 52)
+                    .background(Color.white.opacity(0.18), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Open a 3MF project").font(.headline)
+                    Text("From Files, or share one to Duo Slicer from MakerWorld, Safari or Mail").font(.caption).opacity(0.9)
+                        .multilineTextAlignment(.leading)
                 }
-                .onDelete { idx in idx.map { model.recents[$0] }.forEach(model.deleteRecent) }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right").font(.footnote.weight(.bold)).opacity(0.8)
+            }
+            .foregroundStyle(.white)
+            .padding(16)
+            .background(Theme.gradient, in: RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous))
+            .shadow(color: Theme.accent2.opacity(0.25), radius: 12, y: 5)
+        }
+        .buttonStyle(.plain)
+        .keyboardShortcut("o", modifiers: .command)
+
+        if !model.recents.isEmpty {
+            CardTitle(title: "Recent projects", icon: "clock.arrow.circlepath")
+                .padding(.top, 4)
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 12)], spacing: 12) {
+                ForEach(model.recents, id: \.self) { url in
+                    RecentProjectCard(url: url)
+                }
             }
         }
     }
 
     @ViewBuilder var deviceSections: some View {
-        Section {
-            Button {
-                // no printer yet: go straight to finding one on the Wi-Fi
-                if printer.printers.isEmpty { showAddPrinter = true } else { showPrinters = true }
-            } label: {
-                PrinterStatusRow()
-            }
-        } header: {
-            Text(printer.printers.count > 1 ? "Printers" : "Printer")
-        } footer: {
-            Text(printer.printers.count > 1
-                 ? "\(printer.printers.count) printers. Plates are sliced for the selected one, the \(model.target.name)."
-                 : "Slicing for the \(model.target.name).")
+        CardTitle(title: printer.printers.count > 1 ? "Printers" : "Printer", icon: "printer",
+                  trailing: printer.printers.count > 1 ? "\(printer.printers.count) saved" : nil)
+        Button {
+            // no printer yet: go straight to finding one on the Wi-Fi
+            if printer.printers.isEmpty { showAddPrinter = true } else { showPrinters = true }
+        } label: {
+            PrinterStatusRow().card()
         }
-        Section {
-            Button {
-                showQueue = true
-            } label: {
-                QueueSummaryRow()
-            }
+        .buttonStyle(.plain)
+        Button {
+            showQueue = true
+        } label: {
+            QueueSummaryRow().card()
         }
-        Section {
+        .buttonStyle(.plain)
+        Button {
+            showClaude = true
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "sparkles")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                    .frame(width: 38, height: 38)
+                    .background(Theme.gradient, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Use with Claude").foregroundStyle(.primary)
+                    Text(claude.enabled ? claude.status : "Let Claude open, slice and print from this app.")
+                        .font(.footnote).foregroundStyle(.secondary).lineLimit(2)
+                }
+                Spacer()
+                Image(systemName: "chevron.right").font(.footnote).foregroundStyle(.tertiary)
+            }
+            .card()
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+/// A recent project: its first plate's picture (once it's been opened here), name, and a Print shortcut that opens
+/// the project straight into the Print sheet.
+struct RecentProjectCard: View {
+    @EnvironmentObject var model: AppModel
+    let url: URL
+    @State private var confirmDelete = false
+
+    var name: String { AppModel.projectName(url.lastPathComponent) }
+
+    var modified: Date? { try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
             Button {
-                showClaude = true
+                Task { await model.open(url: url) }
             } label: {
-                HStack(spacing: 12) {
-                    Image(systemName: "sparkles").foregroundStyle(Theme.accent)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Use with Claude").foregroundStyle(.primary)
-                        Text(claude.enabled ? claude.status : "Let Claude open, slice and print from this app.")
-                            .font(.footnote).foregroundStyle(.secondary).lineLimit(2)
+                VStack(alignment: .leading, spacing: 8) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.softGradient)
+                        if let img = model.picture(for: url) {
+                            Image(uiImage: img).resizable().scaledToFit().padding(6)
+                        } else {
+                            Image(systemName: "cube.transparent").font(.system(size: 34, weight: .light)).foregroundStyle(Theme.accent.opacity(0.7))
+                        }
                     }
-                    Spacer()
-                    Image(systemName: "chevron.right").font(.footnote).foregroundStyle(.tertiary)
+                    .frame(height: 112)
+                    Text(name).font(.subheadline.weight(.semibold)).foregroundStyle(.primary).lineLimit(2).multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
+            .buttonStyle(.plain)
+            HStack(spacing: 6) {
+                if let d = modified {
+                    Text(d.formatted(.relative(presentation: .named))).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                Button {
+                    Task {
+                        model.printOnOpen = true
+                        await model.open(url: url)
+                        if model.project == nil { model.printOnOpen = false }
+                    }
+                } label: {
+                    Label("Print", systemImage: "printer.fill").font(.caption.weight(.semibold))
+                }
+                .buttonStyle(.borderedProminent)
+                .buttonBorderShape(.capsule)
+                .controlSize(.small)
+                .tint(Theme.accent)
+            }
+        }
+        .card(padding: 10)
+        .contextMenu {
+            Button { Task { await model.open(url: url) } } label: { Label("Open", systemImage: "arrow.up.forward.app") }
+            Button(role: .destructive) { confirmDelete = true } label: { Label("Delete", systemImage: "trash") }
+        }
+        .confirmationDialog("Delete \(name)?", isPresented: $confirmDelete, titleVisibility: .visible) {
+            Button("Delete", role: .destructive) { model.deleteRecent(url) }
         }
     }
 }
@@ -249,19 +324,34 @@ struct PrinterStatusRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Circle()
-                .fill(printer.connected ? (printer.isBusy ? Theme.accent : Color.green) : Color.secondary)
-                .frame(width: 10, height: 10)
+            Image(systemName: printer.isConfigured ? "printer.fill" : "plus")
+                .font(.headline)
+                .foregroundStyle(printer.isConfigured ? stateColor : Theme.accent)
+                .frame(width: 38, height: 38)
+                .background((printer.isConfigured ? stateColor : Theme.accent).opacity(0.14), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
             VStack(alignment: .leading, spacing: 2) {
                 Text(printer.active.map { "\($0.name) · \($0.hostOnly)" } ?? "Add your printer")
                     .foregroundStyle(.primary)
+                    .lineLimit(1)
                 Text(statusLine).font(.footnote).foregroundStyle(.secondary)
+                if printer.connected && printer.state == "RUNNING" {
+                    ProgressView(value: Double(printer.percent) / 100).tint(Theme.accent2)
+                }
                 if let others = othersLine {
                     Text(others).font(.caption).foregroundStyle(.secondary).lineLimit(2)
                 }
             }
             Spacer()
             Image(systemName: "chevron.right").font(.footnote).foregroundStyle(.tertiary)
+        }
+    }
+
+    var stateColor: Color {
+        guard printer.connected else { return .secondary }
+        switch printer.state {
+        case "RUNNING", "PREPARE": return Theme.accent2
+        case "PAUSE": return Theme.warm
+        default: return .green
         }
     }
 

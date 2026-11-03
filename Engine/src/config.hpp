@@ -15,6 +15,7 @@ public:
     int nfil = 1;                              // filaments as the G-code sees them (AMS slots or toolheads)
     std::vector<std::string> filamentPresets;  // chosen preset name per filament
     std::vector<std::string> filamentIds;      // e.g. GFA01
+    std::vector<std::string> filamentKeys;     // keys that come from the filament presets (one value per filament)
 
     // printer
     std::string kind = "bambu";  // "bambu" (single nozzle + AMS) or "klipper_toolchanger"
@@ -46,6 +47,7 @@ struct FilamentInput {
     std::string type;
     std::string color;
     std::string preset;     // explicit choice from the user (empty = map automatically)
+    std::map<std::string, std::string> overrides;  // the user's changes to this filament's settings
 };
 
 // bundle: Resources/profiles/<printer>.json; projectCfg may be an empty object.

@@ -258,6 +258,7 @@ Config buildConfig(const json& bundle, const json& proj, const std::vector<Filam
         c.j[k] = arr;
     }
     c.filamentPresets = presets;
+    c.filamentKeys.assign(fkeys.begin(), fkeys.end());
     for (auto& name : presets)
         c.filamentIds.push_back(bundle["filaments"].contains(name) ? bundle["filaments"][name].value("__filament_id", std::string("")) : "");
     c.j["filament_ids"] = c.filamentIds;
@@ -299,6 +300,13 @@ Config buildConfig(const json& bundle, const json& proj, const std::vector<Filam
             }
         }
     }
+    // the user's changes to one filament (after the overrides for all of them)
+    for (int i = 0; i < c.nfil && i < (int)fins.size(); ++i)
+        for (auto& kv : fins[i].overrides) {
+            if (!c.j.contains(kv.first) || !c.j[kv.first].is_array()) continue;
+            json& arr = c.j[kv.first];
+            if (i < (int)arr.size()) arr[i] = kv.second;
+        }
     // a plate type this printer's filament presets have no temperatures for -> the printer's own plate
     {
         bool any = false;

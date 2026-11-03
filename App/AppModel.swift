@@ -13,6 +13,12 @@ final class AppModel: ObservableObject {
     @Published var options = PrintOptions()
     @Published var toolMapIsCustom = false   // the user picked toolheads by hand
     @Published var effective: [String: String] = [:]
+    /// Filament settings per project filament (index 0 = F1).
+    @Published var effectivePerFilament: [String: [String]] = [:]
+    /// Bumped when a slice should bring up the layer preview (slices from the Print sheet stay on the sheet).
+    @Published var revealPreview = 0
+    /// Open the Print sheet as soon as the project screen appears (Print on a project card on the home screen).
+    @Published var printOnOpen = false
     @Published var slice: SliceSummary?
     @Published var slicedPlate: Int?
     @Published var slicing = false
@@ -121,6 +127,7 @@ final class AppModel: ObservableObject {
 
     func deleteRecent(_ url: URL) {
         try? FileManager.default.removeItem(at: url)
+        try? FileManager.default.removeItem(at: Self.picturesDir.appendingPathComponent(Self.projectName(url.lastPathComponent) + ".png"))
         loadRecents()
     }
 
@@ -181,7 +188,35 @@ final class AppModel: ObservableObject {
             await refreshMesh()
             await refreshThumbnails(old: info, new: info)
             await refreshEffective()
+            cachePicture()
         }
+    }
+
+    // MARK: project pictures for the home screen
+
+    private static var picturesDir: URL {
+        let d = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("ProjectPictures", isDirectory: true)
+        try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+        return d
+    }
+
+    /// "Benchy.3mf" and "Benchy.3mf.zip" -> "Benchy".
+    static func projectName(_ fileName: String) -> String {
+        var n = fileName
+        if n.lowercased().hasSuffix(".zip") { n = String(n.dropLast(4)) }
+        if n.lowercased().hasSuffix(".3mf") { n = String(n.dropLast(4)) }
+        return n
+    }
+
+    private func cachePicture() {
+        guard let img = thumbnails[0], let data = img.pngData() else { return }
+        try? data.write(to: Self.picturesDir.appendingPathComponent(fileName + ".png"))
+    }
+
+    /// The first plate's picture of a recent project, once it has been opened.
+    func picture(for url: URL) -> UIImage? {
+        let f = Self.picturesDir.appendingPathComponent(Self.projectName(url.lastPathComponent) + ".png")
+        return UIImage(contentsOfFile: f.path)
     }
 
     func close() {
@@ -379,7 +414,54 @@ final class AppModel: ObservableObject {
         for (k, v) in raw {
             if let s = v as? String { flat[k] = s } else if let n = v as? NSNumber { flat[k] = n.stringValue }
         }
+        var per: [String: [String]] = [:]
+        for (k, v) in (raw["per_filament"] as? [String: Any]) ?? [:] {
+            if let a = v as? [Any] { per[k] = a.map { ($0 as? String) ?? "\($0)" } }
+        }
         effective = flat
+        effectivePerFilament = per
+    }
+
+    /// The value a filament setting has for one project filament (1-based).
+    func filamentValue(_ key: String, _ filament: Int) -> String? {
+        if let v = options.filamentOverrides?[safe: filament - 1]?[key] { return v }
+        return effectivePerFilament[key]?[safe: filament - 1]
+    }
+
+    func filamentOverride(_ key: String, _ filament: Int) -> String? { options.filamentOverrides?[safe: filament - 1]?[key] }
+
+    /// Change one filament's setting (nil: back to its preset).
+    func setFilamentOverride(_ key: String, _ filament: Int, _ value: String?) async {
+        let n = max(project?.filaments.count ?? 0, filament)
+        var all = options.filamentOverrides ?? []
+        if all.count < n { all += Array(repeating: [:], count: n - all.count) }
+        if let value { all[filament - 1][key] = value } else { all[filament - 1].removeValue(forKey: key) }
+        options.filamentOverrides = all.contains { !$0.isEmpty } ? all : nil
+        invalidateSlice()
+        await refreshEffective()
+    }
+
+    /// Settings changed from the quality preset (the build plate choice doesn't count).
+    var changedSettingsCount: Int {
+        options.overrides.keys.filter { $0 != "curr_bed_type" }.count + (options.filamentOverrides ?? []).reduce(0) { $0 + $1.count }
+    }
+
+    /// Back to the quality preset and the filament presets (keeps the build plate).
+    func resetSettings() async {
+        let bed = options.overrides["curr_bed_type"]
+        options.overrides = bed.map { ["curr_bed_type": $0] } ?? [:]
+        options.filamentOverrides = nil
+        invalidateSlice()
+        await refreshEffective()
+    }
+
+    /// Several settings at once (Easy mode's strength levels); nil values go back to the preset.
+    func setOverrides(_ values: [String: String?]) async {
+        for (k, v) in values {
+            if let v { options.overrides[k] = v } else { options.overrides.removeValue(forKey: k) }
+        }
+        invalidateSlice()
+        await refreshEffective()
     }
 
     func setOverride(_ key: String, _ value: String?) async {
@@ -478,7 +560,8 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func sliceCurrent() async {
+    /// Slice the selected plate. `reveal`: switch to the layer preview afterwards.
+    func sliceCurrent(reveal: Bool = true) async {
         guard !slicing else { return }
         slicing = true
         sliceProgress = 0
@@ -503,6 +586,7 @@ final class AppModel: ObservableObject {
         layerCount = await run { $0.layerCount }
         previewLayer = max(0, layerCount - 1)
         await loadPreview()
+        if reveal { revealPreview += 1 }
     }
 
     func loadPreview() async {
