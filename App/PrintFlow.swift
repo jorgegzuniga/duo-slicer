@@ -111,12 +111,13 @@ struct PrintFlowView: View {
     @ViewBuilder var printerRow: some View {
         if printer.printers.count > 1 {
             Picker(selection: Binding(get: { printer.activeID ?? "" }, set: { if !$0.isEmpty { printer.select($0) } })) {
-                ForEach(printer.printers) { p in Text("\(p.name) · \(p.model?.shortName ?? "")").tag(p.id) }
+                ForEach(printer.printers) { p in Text(p.name).tag(p.id) }
             } label: {
                 HStack(spacing: 8) {
-                    Label("Printer", systemImage: "printer")
+                    Image(systemName: "printer").foregroundStyle(Theme.accent)
                     printerState
                 }
+                .accessibilityLabel("Printer")
             }
             .pickerStyle(.menu)
         } else if printer.isConfigured {
