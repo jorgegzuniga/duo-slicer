@@ -199,6 +199,7 @@ struct Writer {
     }
 
     double roleSpeed(Role r, bool first) {
+        if (r == Role::Ironing) return C.num("ironing_speed", 0, 30);
         if (first) {
             if (r == Role::Outer || r == Role::Inner || r == Role::Skirt || r == Role::Brim) return C.num("initial_layer_speed", 0, 50);
             return C.num("initial_layer_infill_speed", 0, 105);
@@ -213,6 +214,7 @@ struct Writer {
         }
     }
     double roleAccel(Role r, bool first) {
+        if (r == Role::Ironing) return accelFor("top_surface_acceleration");
         if (first) return accelFor("initial_layer_acceleration");
         switch (r) {
             case Role::Outer: return accelFor("outer_wall_acceleration");
@@ -239,7 +241,7 @@ struct Writer {
         if (tp.closed) {
             size_t best = 0;
             double bd = 1e300;
-            if (posKnown)
+            if (posKnown && !tp.seamSet)
                 for (size_t i = 0; i < pts.size(); ++i) {
                     double d = std::hypot(pts[i].x / kScale - x, pts[i].y / kScale - y);
                     if (d < bd) { bd = d; best = i; }
@@ -265,7 +267,7 @@ struct Writer {
         double v = effSpeed(tp.role, tp.width, first);
         double flow = C.num("filament_flow_ratio", tool, 1.0);
         if (first) flow *= C.num("initial_layer_flow_ratio", 0, 1.0) > 0 ? C.num("initial_layer_flow_ratio", 0, 1.0) : 1.0;
-        double ePerMm = mm3PerMm(tp.width, layerH) / filArea * flow;
+        double ePerMm = mm3PerMm(tp.width, layerH) / filArea * flow * tp.flow;
         int F = (int)std::lround(v * 60);
         bool fset = false;
         for (size_t i = 1; i < pts.size(); ++i) {

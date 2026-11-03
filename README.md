@@ -16,7 +16,8 @@ The dual-nozzle Bambu printers (H2D, H2D Pro, H2C, X2D) aren't supported yet. Sa
 - **Opens Bambu Studio and OrcaSlicer 3MF projects** with their plates, objects, colours and per-object settings (Files, MakerWorld, Safari, Mail, the share sheet, or drag and drop).
 - **3D plate view** on the target printer's bed: tap a part to rotate it 90° or 15° on any axis, tap a face to put it down, auto-flatten, or reset. Parts that don't fit the bed, are too tall, or sit in the X1/P1 cutter corner are flagged.
 - **Move and arrange parts**: drag a selected part across the bed, type its X/Y position or nudge it 1, 5 or 10 mm, or **Arrange** the plate (packed front-left with a 6 mm gap, clear of the cutter corner, optionally turning parts to fit). **Move to plate** sends a part to another plate or a new one; empty plates can be removed, and **Undo** (⌘Z) steps back through all of it. The edits are saved in the 3MF you share.
-- **Settings**: each printer's own quality presets, build plate, walls, top/bottom layers, infill, brim, skirt; filament preset and colour per slot. On the U1, which head prints each colour, matched to the filament loaded in each head.
+- **Settings, Easy or Advanced**: **Easy** is a handful of big choices: quality preset tiles, strength levels (Light, Standard, Strong, Maximum), infill amount and pattern, bed adhesion (none, skirt, brim), smooth top (ironing), textured walls (fuzzy skin), build plate and the filaments on the plate. **Advanced** has OrcaSlicer's Prepare settings, laid out like OrcaSlicer's tabs (Quality, Strength, Speed, Support, Multimaterial, Others) plus a Filament tab for each filament on its own (temperatures, bed temperatures per plate type, flow, cooling, retraction), with search, a **Changed** list, and swipe or long-press to reset a setting. Settings the iPhone slicer doesn't act on yet are marked "Not on iPhone yet"; they're kept in the print file's settings. On the U1, which head prints each colour, matched to the filament loaded in each head.
+- **Print in one tap**: the **Print** button over the 3D view (or **Print** on a project card on the home screen) opens the Print sheet. It slices the plate if it needs it, shows the time, filament, layers and colours, matches AMS spools or U1 heads, and **Start print** sends it (the button is where you confirm the bed is clear). Leveling, flow calibration and the other print options stay folded away under Print options and are remembered.
 - **Slices on the phone** with its own engine (C++, Clipper2) and each printer's official start, filament-change and end G-code from the Bambu Studio and OrcaSlicer profiles.
 - **Layer preview**, print time, grams per colour, colour changes.
 - **Finds printers on your Wi-Fi**: tap yours; a Bambu printer needs only its access code, a U1 nothing.
@@ -36,7 +37,7 @@ Built with the iOS 27.1 SDK so the app fills the inner screen. The project scree
 
 ## Use with Claude
 
-Duo Slicer can be a custom connector in Claude. Claude can list and open projects, read plates and settings, change settings, rotate, move and arrange parts, move parts between plates, slice, look at layer previews, check every printer, look through a printer's camera, start prints and run the print queue. Starting or stopping a print, and starting the queue (which means the beds are clear), always waits for you to approve it on the phone, and the app has to be open.
+Duo Slicer can be a custom connector in Claude. Claude can list and open projects, read plates and settings, change settings (any OrcaSlicer process key, and one filament's settings), rotate, move and arrange parts, move parts between plates, slice, look at layer previews, check every printer, look through a printer's camera, start prints and run the print queue. Starting or stopping a print, and starting the queue (which means the beds are clear), always waits for you to approve it on the phone, and the app has to be open.
 
 How it connects: the app keeps a WebSocket to a small relay (`relay/`, a Cloudflare Worker with a Durable Object) and Claude talks MCP to the same relay. Each phone has its own secret, which is part of the connector URL.
 
@@ -48,11 +49,15 @@ How it connects: the app keeps a WebSocket to a small relay (`relay/`, a Cloudfl
 
 Anyone with the connector URL can use these tools while the app is open, so keep it private; **Make a new connector URL** in the app retires the old one.
 
+## What the iPhone slicer acts on
+
+Layer heights and line widths; walls, wall order and seam position (aligned, back, nearest, random); top and bottom shells and their patterns (rectilinear, monotonic, concentric) and flow ratios; sparse infill density, direction and pattern (grid, line, rectilinear, aligned rectilinear, triangles, tri-hexagon, cubic, adaptive and support cubic as cubic, gyroid, concentric, cross hatch as grid); ironing (top, topmost, all solid; flow, spacing, inset, speed, angle, rectilinear or concentric); X-Y hole and contour compensation; elephant foot compensation over one or more layers; fuzzy skin (contour, contour and holes, all walls; thickness, point distance); skirt loops, distance and height; outer, inner and outer-and-inner brims; per-feature speeds and accelerations; travel speed; and per filament the nozzle and bed temperatures, flow ratio, max volumetric speed, cooling and retraction. `tools/check_settings.py` slices with each of these changed and checks the G-code.
+
 ## Limits
 
-- No supports yet (flat and layered prints don't need them). Supports in a project are left out with a warning.
-- Infill patterns: grid and lines. Other patterns print as grid.
-- Walls use the classic (fixed-width) generator, so features thinner than one line width (about 0.4 mm) are dropped.
+- No supports or rafts yet (flat and layered prints don't need them). Supports in a project are left out with a warning.
+- Infill patterns honeycomb, 3D honeycomb, lightning, Hilbert curve, Archimedean chords and octagram spiral print as grid; those surface patterns print as rectilinear.
+- Walls use the classic (fixed-width) generator, so features thinner than one line width (about 0.4 mm) are dropped. Overhang and bridge detection, spiral vase, only-one-wall-top and jerk aren't done yet.
 - No prime tower: Bambu printers purge in the chute during each colour change; the U1 primes each head with its own pre-extrude routine.
 - Painted multi-colour regions inside a single part use that part's dominant colour.
 - Prints one layer at a time across all parts (no by-object sequence).
@@ -81,6 +86,7 @@ The Xcode project is generated with [XcodeGen](https://github.com/yonaskolb/Xcod
 ./build_cli.sh                                   # builds ./a1cli on macOS or Linux
 ./a1cli Resources/profiles/bambu-x1c.json project.3mf <plateIndex> options.json out.gcode.3mf
 ./tools/engine_selftest.sh                       # what CI runs
+python3 tools/check_settings.py ./a1cli project.3mf   # the settings above really change the G-code
 python3 tools/validate_printers.py ./a1cli project.3mf:0,1   # every printer, with bed and template checks
 ```
 

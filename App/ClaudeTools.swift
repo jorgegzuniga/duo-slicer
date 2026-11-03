@@ -146,6 +146,11 @@ struct ClaudeTools {
             if let v = model.effective[k] { s[k] = v }
         }
         if !model.options.overrides.isEmpty { s["changed_from_preset"] = model.options.overrides }
+        if let fo = model.options.filamentOverrides, model.options.hasFilamentOverrides {
+            var d: [String: Any] = [:]
+            for (i, o) in fo.enumerated() where !o.isEmpty { d[String(i + 1)] = o }
+            s["filament_changes"] = d
+        }
         return s
     }
 
@@ -207,6 +212,17 @@ struct ClaudeTools {
                 let s = (v as? String) ?? "\(v)"
                 await model.setOverride(k, s)
                 notes.append("\(k) = \(s)")
+            }
+        }
+        if let fo = a["filament_overrides"] as? [String: Any] {
+            for (k, v) in fo {
+                guard let f = Int(k.filter(\.isNumber)), f >= 1, f <= p.filaments.count, let values = v as? [String: Any] else { continue }
+                for (key, val) in values {
+                    if val is NSNull { await model.setFilamentOverride(key, f, nil); notes.append("F\(f) \(key): preset value"); continue }
+                    let s = (val as? String) ?? "\(val)"
+                    await model.setFilamentOverride(key, f, s)
+                    notes.append("F\(f) \(key) = \(s)")
+                }
             }
         }
         if let fp = a["filament_presets"] as? [String: Any] {

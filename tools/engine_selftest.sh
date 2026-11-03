@@ -56,4 +56,9 @@ c++ -O1 -std=c++17 -Wall -Wno-sign-compare -IEngine/third_party -IEngine/src -IE
 
 # every printer bundle
 python3 tools/validate_printers.py ./a1cli "$T/tile.3mf"
+
+# OrcaSlicer settings the engine acts on (ironing, infill patterns, compensation, seams, fuzzy skin, per-filament overrides)
+python3 tools/check_settings.py ./a1cli "$T/tile.3mf"
+python3 tools/make_demo_3mf.py "$T/demo.3mf" > /dev/null
+python3 tools/check_settings.py ./a1cli "$T/demo.3mf"
 echo "engine self-test passed"

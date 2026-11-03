@@ -49,6 +49,7 @@ struct LayerPreviewView: View {
                     let role = Int(key & 0xff), fil = Int(key >> 8)
                     var c = model.color(of: fil)
                     if role == 5 { c = c.opacity(0.75) }       // sparse infill
+                    if role == 8 { c = Color.white.opacity(0.35) }  // ironing: a light sheen over the top
                     let w = max(0.6, 0.42 * s)
                     ctx.stroke(path, with: .color(c), style: StrokeStyle(lineWidth: role <= 1 ? w * 1.05 : w, lineCap: .round))
                 }

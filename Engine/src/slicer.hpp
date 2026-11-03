@@ -12,7 +12,7 @@ namespace a1 {
 
 constexpr double kScale = 10000.0;  // Clipper units per mm
 
-enum class Role { Outer, Inner, Top, Bottom, Solid, Sparse, Skirt, Brim };
+enum class Role { Outer, Inner, Top, Bottom, Solid, Sparse, Skirt, Brim, Ironing };
 const char* roleName(Role r);
 
 struct ToolPath {
@@ -20,6 +20,8 @@ struct ToolPath {
     double width;            // mm
     bool closed;
     Clipper2Lib::Path64 pts; // scaled
+    double flow = 1.0;       // extrusion multiplier (ironing, top/bottom flow ratio)
+    bool seamSet = false;    // closed loop already starts at its seam (else the writer starts it nearest the nozzle)
 };
 
 // Everything one object prints in one filament on one layer.
@@ -49,6 +51,22 @@ struct SliceSettings {
     double skirtDistance = 2;
     double topAngle = 45, solidAngle = 45, sparseAngle = 45;
     std::string wallSequence = "inner wall/outer wall";
+    // surfaces
+    std::string topPattern = "monotonicline", bottomPattern = "monotonic", solidPattern = "zig-zag";
+    double topFlow = 1.0, bottomFlow = 1.0;
+    // dimensional compensation (mm)
+    double xyHole = 0, xyContour = 0, elephantFoot = 0;
+    int elephantFootLayers = 1;
+    // ironing: "no ironing", "top", "topmost", "solid"
+    std::string ironingType = "no ironing", ironingPattern = "zig-zag";
+    double ironingFlow = 0.1, ironingSpacing = 0.15, ironingInset = 0, ironingAngle = 45;
+    // seam: "nearest", "aligned", "back", "random"
+    std::string seam = "aligned";
+    // fuzzy skin: "none", "external", "all", "allwalls"
+    std::string fuzzy = "none";
+    double fuzzyThickness = 0.3, fuzzyPointDist = 0.8;
+    bool fuzzyFirstLayer = false;
+    int skirtHeight = 1;
     // target printer bed (printable area) and an optional no-print box (e.g. the X1/P1 purge corner)
     double bedMinX = 0, bedMinY = 0, bedMaxX = 256, bedMaxY = 256;
     double exMinX = 0, exMinY = 0, exMaxX = 0, exMaxY = 0;
