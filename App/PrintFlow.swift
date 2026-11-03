@@ -30,6 +30,10 @@ struct PrintFlowView: View {
         NavigationStack {
             List {
                 header
+                // tool changers: heads are matched first (before slicing), since changing a head means slicing again
+                if !sent, model.target.isToolChanger, let p = model.plate, !p.isEmpty {
+                    ToolheadSection(plate: p)
+                }
                 if sent {
                     sentSection
                 } else if let e = sliceError {
@@ -43,12 +47,10 @@ struct PrintFlowView: View {
                     slicingSection
                 } else if let s = model.slice {
                     summary(s)
-                    if model.target.isToolChanger, let p = model.plate {
-                        ToolheadSection(plate: p)
-                    } else {
+                    if !model.target.isToolChanger {
                         spools(s)
+                        optionsSection
                     }
-                    if !model.target.isToolChanger { optionsSection }
                     actionSection(s)
                 }
             }
@@ -111,10 +113,12 @@ struct PrintFlowView: View {
             Picker(selection: Binding(get: { printer.activeID ?? "" }, set: { if !$0.isEmpty { printer.select($0) } })) {
                 ForEach(printer.printers) { p in Text("\(p.name) · \(p.model?.shortName ?? "")").tag(p.id) }
             } label: {
-                Label("Printer", systemImage: "printer")
+                HStack(spacing: 8) {
+                    Label("Printer", systemImage: "printer")
+                    printerState
+                }
             }
             .pickerStyle(.menu)
-            printerState
         } else if printer.isConfigured {
             HStack {
                 Label(printer.active?.name ?? "Printer", systemImage: "printer")

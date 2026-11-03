@@ -94,7 +94,7 @@ enum DemoMode {
         if let n = Int(d.string(forKey: "DuoDemoPlate") ?? ""), let i = model.project?.plates.firstIndex(where: { $0.id == n }) {
             await model.selectPlate(i)
         }
-        if d.bool(forKey: "DuoDemoSlice") { await model.sliceCurrent() }
+        if d.bool(forKey: "DuoDemoSlice") { await model.sliceCurrent(reveal: panel == nil) }
         if let p = panel { NotificationCenter.default.post(name: .duoDemoPanel, object: p.rawValue) }
         if d.bool(forKey: "DuoDemoQueue") { await fillQueue(model: model, printer: printer, queue: queue) }
     }

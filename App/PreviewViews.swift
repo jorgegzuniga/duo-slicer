@@ -125,10 +125,13 @@ struct SliceSummaryView: View {
 
     var body: some View {
         Section("Sliced") {
-            LabeledContent("Print time", value: formatDuration(summary.seconds ?? 0))
-            LabeledContent("Filament", value: String(format: "%.1f g", summary.grams ?? 0))
-            LabeledContent("Layers", value: "\(summary.layers ?? 0)")
-            if let t = summary.toolChanges, t > 0 { LabeledContent("Colour changes", value: "\(t)") }
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+                StatTile(value: formatDuration(summary.seconds ?? 0), label: "print time", icon: "clock")
+                StatTile(value: String(format: "%.1f g", summary.grams ?? 0), label: "filament", icon: "scalemass")
+                StatTile(value: "\(summary.layers ?? 0)", label: "layers", icon: "square.stack.3d.up")
+                StatTile(value: "\(summary.toolChanges ?? 0)", label: "colour changes", icon: "paintpalette")
+            }
+            .listRowInsets(EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8))
             LabeledContent("Build plate", value: bedTypeLabel(summary.bedType ?? ""))
             if let p = summary.printer { LabeledContent("Printer", value: p) }
             ForEach(summary.filaments ?? []) { f in

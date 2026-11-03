@@ -77,8 +77,11 @@ func settingIsOn(_ v: String) -> Bool { ["1", "true", "yes", "on"].contains(v.lo
 func presetParts(_ preset: String) -> (height: String, name: String) {
     let base = presetDisplayName(preset)
     let parts = base.split(separator: " ", maxSplits: 1).map(String.init)
-    guard let first = parts.first, first.lowercased().hasSuffix("mm"), Double(first.dropLast(2)) != nil else { return ("", base) }
-    return (String(first.dropLast(2)), parts.count > 1 ? parts[1] : "")
+    // "0.20mm Standard" (Bambu) or "0.20 Standard" (Snapmaker)
+    guard let first = parts.first else { return ("", base) }
+    let number = first.lowercased().hasSuffix("mm") ? String(first.dropLast(2)) : first
+    guard Double(number) != nil else { return ("", base) }
+    return (number, parts.count > 1 ? parts[1] : "")
 }
 
 // MARK: - Easy
