@@ -1,0 +1,35 @@
+Detected file type from extension: PNG
+Note: No display specified. Defaulting to display: B5EA4865-4143-4592-861C-AF449811B4E3 (screenID: 1, name: LCD)
+Wrote screenshot to: /Users/runner/work/duo-slicer/duo-slicer/shots/duo-inner-wide-plate.png
+Detected file type from extension: PNG
+Note: No display specified. Defaulting to display: B5EA4865-4143-4592-861C-AF449811B4E3 (screenID: 1, name: LCD)
+Wrote screenshot to: /Users/runner/work/duo-slicer/duo-slicer/shots/duo-inner-wide-preview.png
+Detected file type from extension: PNG
+Note: No display specified. Defaulting to display: B5EA4865-4143-4592-861C-AF449811B4E3 (screenID: 1, name: LCD)
+Wrote screenshot to: /Users/runner/work/duo-slicer/duo-slicer/shots/duo-inner-wide-u1-print.png
+Detected file type from extension: PNG
+Note: No display specified. Defaulting to display: B5EA4865-4143-4592-861C-AF449811B4E3 (screenID: 1, name: LCD)
+Wrote screenshot to: /Users/runner/work/duo-slicer/duo-slicer/shots/duo-inner-wide-settings.png
+timed out after 45s: xcrun simctl io 3CE49892-DF52-49A7-9D5F-68E49A7DD048 screenshot shots/duo-inner-wide-settings-advanced.png
+ci/simulator.sh: line 22: 10940 Killed: 9               "$@"
+timed out after 45s: xcrun simctl io 3CE49892-DF52-49A7-9D5F-68E49A7DD048 screenshot shots/duo-inner-wide-settings-advanced.png
+ci/simulator.sh: line 22: 11230 Killed: 9               "$@"
+timed out after 30s: xcrun simctl terminate 3CE49892-DF52-49A7-9D5F-68E49A7DD048 Com.jorgegzuniga.duoslicer
+Detected file type from extension: PNG
+Note: No display specified. Defaulting to display: B5EA4865-4143-4592-861C-AF449811B4E3 (screenID: 1, name: LCD)
+Wrote screenshot to: /Users/runner/work/duo-slicer/duo-slicer/shots/duo-inner-wide-print-sheet.png
+Detected file type from extension: PNG
+Note: No display specified. Defaulting to display: B5EA4865-4143-4592-861C-AF449811B4E3 (screenID: 1, name: LCD)
+Wrote screenshot to: /Users/runner/work/duo-slicer/duo-slicer/shots/duo-inner-wide-home.png
+Detected file type from extension: PNG
+Note: No display specified. Defaulting to display: B5EA4865-4143-4592-861C-AF449811B4E3 (screenID: 1, name: LCD)
+Wrote screenshot to: /Users/runner/work/duo-slicer/duo-slicer/shots/duo-inner-tall-plate.png
+Detected file type from extension: PNG
+Note: No display specified. Defaulting to display: B5EA4865-4143-4592-861C-AF449811B4E3 (screenID: 1, name: LCD)
+Wrote screenshot to: /Users/runner/work/duo-slicer/duo-slicer/shots/duo-inner-tall-preview.png
+Detected file type from extension: PNG
+Note: No display specified. Defaulting to display: B5EA4865-4143-4592-861C-AF449811B4E3 (screenID: 1, name: LCD)
+Wrote screenshot to: /Users/runner/work/duo-slicer/duo-slicer/shots/duo-inner-tall-home.png
+Detected file type from extension: PNG
+Note: No display specified. Defaulting to display: B5EA4865-4143-4592-861C-AF449811B4E3 (screenID: 1, name: LCD)
+Wrote screenshot to: /Users/runner/work/duo-slicer/duo-slicer/shots/duo-inner-regular-plate.png

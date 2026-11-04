@@ -1,0 +1,11 @@
+duo-inner-wide-plate: 0.6% cpu, 305 MB
+duo-inner-wide-preview: 0.0% cpu, 320 MB
+duo-inner-wide-u1-print: 0.0% cpu, 283 MB
+duo-inner-wide-settings: 0.0% cpu, 371 MB
+duo-inner-wide-settings-advanced: 0.0% cpu, 303 MB
+duo-inner-wide-print-sheet: 0.0% cpu, 90 MB
+duo-inner-wide-home: 0.0% cpu, 230 MB
+duo-inner-tall-plate: 0.0% cpu, 316 MB
+duo-inner-tall-preview: 0.0% cpu, 319 MB
+duo-inner-tall-home: 0.0% cpu, 229 MB
+duo-inner-regular-plate: 0.0% cpu, 315 MB
