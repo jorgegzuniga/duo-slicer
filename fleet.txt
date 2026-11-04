@@ -1,0 +1,33 @@
+{"result": "ok"}
+{"result": "ok"}
+{"result": "ok"}
+{"result": "ok"}
+== what the stand-ins saw
+08:41:02 P1S: debug print Benchy
+08:41:06 P1S: MQTT login from 127.0.0.2 as bblp: ok
+08:41:06 X1C: MQTT login from 127.0.0.4 as bblp: ok
+08:41:31 P1S: debug print Benchy
+08:41:34 P1S: MQTT login from 127.0.0.2 as bblp: ok
+08:41:34 X1C: MQTT login from 127.0.0.4 as bblp: ok
+08:41:35 P1S: camera login from 127.0.0.2: ok
+08:41:35 P1S: camera frame 1
+08:41:45 P1S: camera frame 20
+08:41:56 P1S: camera frame 40
+08:41:58 X1C: debug print Gearbox
+08:42:02 X1C: MQTT login from 127.0.0.4 as bblp: ok
+08:42:02 P1S: MQTT login from 127.0.0.2 as bblp: ok
+08:42:03 X1C: RTSP Digest login from 127.0.0.4: ok
+08:42:03 X1C: RTSP PLAY, streaming H.264
+08:42:03 X1C: RTSP frame 1
+08:42:18 X1C: RTSP frame 100
+08:42:35 P1S: MQTT login from 127.0.0.2 as bblp: ok
+08:42:35 X1C: MQTT login from 127.0.0.4 as bblp: ok
+08:43:22 P1S: MQTT login from 127.0.0.2 as bblp: ok
+08:43:22 X1C: MQTT login from 127.0.0.4 as bblp: ok
+08:43:24 P1S: FTPS upload Duo_demo_Coaster_p1.gcode.3mf (161677 bytes)
+08:43:24 P1S: print Duo_demo_Coaster_p1.gcode.3mf as 'Duo_demo_Coaster' (uploaded: 161677 bytes, plate Metadata/plate_1.gcode, ams True [0, 1, 2, 1], leveling False)
+08:43:24 U1: upload Duo_demo_Tags_p2.gcode (381916 bytes with the form)
+08:43:24 U1: start Duo_demo_Tags_p2.gcode
+08:45:13 U1: debug print Coasters
+08:45:18 X1C: MQTT login from 127.0.0.4 as bblp: ok
+08:45:18 P1S: MQTT login from 127.0.0.2 as bblp: ok
