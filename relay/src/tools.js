@@ -53,8 +53,13 @@ export const TOOLS = [
     description:
       "Change slicing settings for the open project. process: quality preset name (see list_presets). bed_type: build plate. " +
       "overrides: settings by key, for example layer_height (mm), wall_loops, top_shell_layers, bottom_shell_layers, " +
-      "sparse_infill_density (\"20%\"), sparse_infill_pattern (grid, line, zig-zag), brim_type (no_brim, outer_only, auto_brim), " +
-      "brim_width (mm), skirt_loops, outer_wall_speed (mm/s); null puts a key back to the preset value. " +
+      "sparse_infill_density (\"20%\"), sparse_infill_pattern (grid, gyroid, cubic, triangles, tri-hexagon, concentric, line, zig-zag), " +
+      "top_surface_pattern (monotonicline, concentric…), ironing_type (no ironing, top, topmost), seam_position (aligned, back, nearest, random), " +
+      "fuzzy_skin (none, external, all), elefant_foot_compensation, xy_hole_compensation, xy_contour_compensation (mm), " +
+      "brim_type (no_brim, outer_only, inner_only, outer_and_inner, auto_brim), brim_width (mm), skirt_loops, skirt_height, " +
+      "speeds such as outer_wall_speed (mm/s) and accelerations; any OrcaSlicer / Bambu Studio process key works. " +
+      "null puts a key back to the preset value. filament_overrides changes one filament's settings: " +
+      "{\"1\": {\"nozzle_temperature\": 215, \"fan_max_speed\": 80}}. " +
       "filament_presets and colors map a filament number to a preset name or a #RRGGBB colour. Slice again afterwards.",
     inputSchema: {
       type: "object",
@@ -63,6 +68,10 @@ export const TOOLS = [
         bed_type: { type: "string" },
         overrides: { type: "object", additionalProperties: { type: ["string", "number", "null"] } },
         filament_presets: { type: "object", additionalProperties: { type: "string" } },
+        filament_overrides: {
+          type: "object",
+          additionalProperties: { type: "object", additionalProperties: { type: ["string", "number", "null"] } },
+        },
         colors: { type: "object", additionalProperties: { type: "string" } },
       },
     },

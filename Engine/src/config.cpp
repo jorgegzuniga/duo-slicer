@@ -78,11 +78,25 @@ SliceSettings Config::sliceSettingsFor(const std::map<std::string, std::string>&
         return str(k, 0, def);
     };
     double nozzle = num("nozzle_diameter", 0, 0.4);
-    auto width = [&](const std::string& k, double def) {
+    auto parseWidth = [&](const std::string& k) {
         std::string s = gets(k, "");
         double w = s.empty() ? 0 : std::atof(s.c_str());
         if (s.find('%') != std::string::npos) w = nozzle * w / 100.0;
-        return w > 0.05 ? w : def;
+        return w;
+    };
+    // 0 = the default line width (OrcaSlicer), else this feature's own default
+    double lineW = parseWidth("line_width");
+    auto width = [&](const std::string& k, double def) {
+        double w = parseWidth(k);
+        if (w > 0.05) return w;
+        return lineW > 0.05 ? lineW : def;
+    };
+    auto ratio = [&](const std::string& k, double def) {
+        std::string s = gets(k, "");
+        if (s.empty()) return def;
+        double v = std::atof(s.c_str());
+        if (s.find('%') != std::string::npos || v > 2.0) v /= 100.0;  // "100%" or 100 -> 1.0
+        return v > 0 ? v : def;
     };
     SliceSettings S;
     S.layerH = get("layer_height", 0.2);
@@ -111,6 +125,28 @@ SliceSettings Config::sliceSettingsFor(const std::map<std::string, std::string>&
     S.sparseAngle = get("infill_direction", 45);
     S.solidAngle = get("solid_infill_direction", 45);
     S.topAngle = S.solidAngle;
+    S.topPattern = gets("top_surface_pattern", "monotonicline");
+    S.bottomPattern = gets("bottom_surface_pattern", "monotonic");
+    S.solidPattern = gets("internal_solid_infill_pattern", "zig-zag");
+    S.topFlow = ratio("top_solid_infill_flow_ratio", 1.0);
+    S.bottomFlow = ratio("bottom_solid_infill_flow_ratio", 1.0);
+    S.xyHole = get("xy_hole_compensation", 0);
+    S.xyContour = get("xy_contour_compensation", 0);
+    S.elephantFoot = std::max(0.0, get("elefant_foot_compensation", 0));
+    S.elephantFootLayers = std::max(1, (int)get("elefant_foot_compensation_layers", 1));
+    S.ironingType = gets("ironing_type", "no ironing");
+    S.ironingPattern = gets("ironing_pattern", "zig-zag");
+    S.ironingFlow = ratio("ironing_flow", 0.1);
+    if (S.ironingFlow > 1.0) S.ironingFlow = 1.0;
+    S.ironingSpacing = std::max(0.02, get("ironing_spacing", 0.15));
+    S.ironingInset = std::max(0.0, get("ironing_inset", 0));
+    S.ironingAngle = get("ironing_direction", get("ironing_angle", 45));
+    S.seam = gets("seam_position", "aligned");
+    S.fuzzy = gets("fuzzy_skin", "none");
+    S.fuzzyThickness = std::max(0.0, get("fuzzy_skin_thickness", 0.3));
+    S.fuzzyPointDist = std::max(0.1, get("fuzzy_skin_point_distance", 0.8));
+    S.fuzzyFirstLayer = get("fuzzy_skin_first_layer", 0) != 0;
+    S.skirtHeight = std::max(1, (int)get("skirt_height", 1));
     S.bedMinX = bedMinX; S.bedMinY = bedMinY; S.bedMaxX = bedMaxX; S.bedMaxY = bedMaxY;
     S.exMinX = exMinX; S.exMinY = exMinY; S.exMaxX = exMaxX; S.exMaxY = exMaxY;
     return S;
@@ -258,6 +294,7 @@ Config buildConfig(const json& bundle, const json& proj, const std::vector<Filam
         c.j[k] = arr;
     }
     c.filamentPresets = presets;
+    c.filamentKeys.assign(fkeys.begin(), fkeys.end());
     for (auto& name : presets)
         c.filamentIds.push_back(bundle["filaments"].contains(name) ? bundle["filaments"][name].value("__filament_id", std::string("")) : "");
     c.j["filament_ids"] = c.filamentIds;
@@ -299,6 +336,13 @@ Config buildConfig(const json& bundle, const json& proj, const std::vector<Filam
             }
         }
     }
+    // the user's changes to one filament (after the overrides for all of them)
+    for (int i = 0; i < c.nfil && i < (int)fins.size(); ++i)
+        for (auto& kv : fins[i].overrides) {
+            if (!c.j.contains(kv.first) || !c.j[kv.first].is_array()) continue;
+            json& arr = c.j[kv.first];
+            if (i < (int)arr.size()) arr[i] = kv.second;
+        }
     // a plate type this printer's filament presets have no temperatures for -> the printer's own plate
     {
         bool any = false;

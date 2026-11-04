@@ -18,7 +18,8 @@ import UIKit
 ///   -DuoClaudeRelay <url>        connect "Use with Claude" to this relay (with -DuoClaudeSecret <key>)
 ///   -DuoDemoPrinters m@a,m@a     replace the saved printers with these (model id @ address; stand-in printers in CI) and connect
 ///   -DuoDemoQueue YES            fill the print queue from the demo project (a P1S plate, two U1 plates) and start it
-///   -DuoDemoSheet <name>         open printers, queue or addToQueue
+///   -DuoDemoSheet <name>         open printers, queue, addToQueue or print (the Print sheet)
+///   -DuoDemoSettings easy|advanced  the Settings panel's mode (-DuoDemoSettingsPage quality, strength, speed, filament…)
 ///   -DuoDemoOpenPrinter <model>  in the printers sheet, open that printer's page
 enum DemoMode {
     static var isOn: Bool { UserDefaults.standard.bool(forKey: "DuoDemo") }
@@ -55,6 +56,10 @@ enum DemoMode {
                 }
             }
         }
+        if let m = d.string(forKey: "DuoDemoSettings") {
+            d.set(SettingsMode(rawValue: m.capitalized)?.rawValue ?? SettingsMode.easy.rawValue, forKey: "settings.mode")
+        }
+        if let pg = d.string(forKey: "DuoDemoSettingsPage") { d.set(pg.lowercased(), forKey: "settings.page") }
         if let relay = d.string(forKey: "DuoClaudeRelay"), !relay.isEmpty {
             claude.relayURL = relay
             claude.enabled = true
@@ -89,7 +94,7 @@ enum DemoMode {
         if let n = Int(d.string(forKey: "DuoDemoPlate") ?? ""), let i = model.project?.plates.firstIndex(where: { $0.id == n }) {
             await model.selectPlate(i)
         }
-        if d.bool(forKey: "DuoDemoSlice") { await model.sliceCurrent() }
+        if d.bool(forKey: "DuoDemoSlice") { await model.sliceCurrent(reveal: panel == nil) }
         if let p = panel { NotificationCenter.default.post(name: .duoDemoPanel, object: p.rawValue) }
         if d.bool(forKey: "DuoDemoQueue") { await fillQueue(model: model, printer: printer, queue: queue) }
     }

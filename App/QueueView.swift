@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Sheets the Print panel, the project's ⋯ menu and the home screen open.
 enum PrintSheet: String, Identifiable {
-    case printers, addToQueue, queue
+    case printers, addToQueue, queue, print
     var id: String { rawValue }
 }
 
@@ -16,6 +16,7 @@ struct PrintSheetContent: View {
         case .printers: PrintersView()
         case .addToQueue: AddToQueueView(start: start, plate: model.plateIndex)
         case .queue: QueueView()
+        case .print: PrintFlowView()
         }
     }
 }

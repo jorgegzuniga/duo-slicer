@@ -330,6 +330,13 @@ std::vector<FilamentInput> projectInputs(const Project& P, const json& o) {
         FilamentInput f{P.settingIds[i], P.types[i], P.colors[i], ""};
         if (o.contains("filaments") && o["filaments"].is_array() && i < o["filaments"].size() && o["filaments"][i].is_string()) f.preset = o["filaments"][i];
         if (o.contains("colors") && o["colors"].is_array() && i < o["colors"].size() && o["colors"][i].is_string()) f.color = o["colors"][i];
+        if (o.contains("filament_overrides") && o["filament_overrides"].is_array() && i < o["filament_overrides"].size() &&
+            o["filament_overrides"][i].is_object())
+            for (auto& kv : o["filament_overrides"][i].items()) {
+                const json& v = kv.value();
+                if (v.is_string()) f.overrides[kv.key()] = v.get<std::string>();
+                else if (v.is_number() || v.is_boolean()) f.overrides[kv.key()] = v.is_boolean() ? (v.get<bool>() ? "1" : "0") : v.dump();
+            }
         v.push_back(f);
     }
     return v;
@@ -695,6 +702,20 @@ char* a1_settings(A1Engine* e, const char* opts) {
     json o = parseOpts(opts);
     Config c = buildConfig(e->printer, P.cfg, projectInputs(P, o), o, w);
     json out;
+    // every effective value (first entry of per-filament / per-extruder lists), for the full settings screen
+    for (auto& kv : c.j.items()) {
+        if (kv.value().is_object()) continue;
+        out[kv.key()] = c.str(kv.key(), 0, "");
+    }
+    // per project filament values of the filament settings
+    json per = json::object();
+    for (auto& k : c.filamentKeys) {
+        if (!c.j.contains(k) || !c.j[k].is_array()) continue;
+        json arr = json::array();
+        for (int i = 0; i < c.nfil; ++i) arr.push_back(c.str(k, i, ""));
+        per[k] = arr;
+    }
+    out["per_filament"] = per;
     for (const char* k : {"layer_height", "initial_layer_print_height", "wall_loops", "top_shell_layers", "bottom_shell_layers", "sparse_infill_density",
                           "sparse_infill_pattern", "brim_type", "brim_width", "skirt_loops", "curr_bed_type", "outer_wall_speed", "inner_wall_speed",
                           "sparse_infill_speed", "top_surface_speed", "initial_layer_speed", "wall_sequence", "print_settings_id"})

@@ -3,6 +3,86 @@ import SwiftUI
 enum Panel: String, CaseIterable, Identifiable {
     case plate = "Plate", settings = "Settings", preview = "Preview", print = "Print"
     var id: String { rawValue }
+
+    var icon: String {
+        switch self {
+        case .plate: return "cube"
+        case .settings: return "slider.horizontal.3"
+        case .preview: return "square.stack.3d.up"
+        case .print: return "printer"
+        }
+    }
+}
+
+/// The panel switcher: icon tabs with a gradient pill under the selected one.
+struct PanelTabs: View {
+    @Binding var panel: Panel
+    @Namespace private var ns
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(Panel.allCases) { p in
+                Button {
+                    withAnimation(.snappy(duration: 0.25)) { panel = p }
+                } label: {
+                    VStack(spacing: 2) {
+                        Image(systemName: p.icon).font(.system(size: 15, weight: .semibold))
+                        Text(p.rawValue).font(.caption2.weight(.semibold)).lineLimit(1).minimumScaleFactor(0.8)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+                    .foregroundStyle(panel == p ? Color.white : Color.secondary)
+                    .background {
+                        if panel == p {
+                            RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.gradient).matchedGeometryEffect(id: "tab", in: ns)
+                        }
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(p.rawValue)
+                .accessibilityAddTraits(panel == p ? .isSelected : [])
+            }
+        }
+        .padding(3)
+        .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+    }
+}
+
+/// The floating Print button over the 3D view: opens the Print sheet, which slices and starts the print.
+struct PrintButton: View {
+    @EnvironmentObject var model: AppModel
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                if model.slicing {
+                    ProgressView().tint(.white)
+                } else {
+                    Image(systemName: "printer.fill")
+                }
+                Text(title).lineLimit(1)
+            }
+            .font(.headline)
+            .foregroundStyle(.white)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 13)
+            .background(Theme.gradient, in: Capsule())
+            .shadow(color: Theme.accent2.opacity(0.35), radius: 10, y: 4)
+        }
+        .buttonStyle(.plain)
+        .disabled(model.plate?.isEmpty ?? true)
+        .opacity(model.plate?.isEmpty ?? true ? 0.5 : 1)
+        .keyboardShortcut("p", modifiers: [.command, .shift])
+        .accessibilityLabel("Print plate \(model.plate?.id ?? 0)")
+    }
+
+    var title: String {
+        if model.slicing { return "Slicing \(Int(model.sliceProgress * 100))%" }
+        if model.sliceIsCurrent, let s = model.slice { return "Print · \(formatDuration(s.seconds ?? 0))" }
+        return "Print"
+    }
 }
 
 /// How the project screen is arranged for the space it has.
@@ -83,7 +163,11 @@ struct ProjectView: View {
             .sheet(item: Binding(get: { shareURL.map { ShareItem(url: $0) } }, set: { shareURL = $0?.url })) { item in
                 ShareSheet(items: [item.url])
             }
-            .onChange(of: model.slice?.ok) { _, ok in if ok == true { panel = .preview } }
+            .onChange(of: model.revealPreview) { _, _ in panel = .preview }
+            .onAppear {
+                // Print on a project card at home: straight to the Print sheet
+                if model.printOnOpen { model.printOnOpen = false; sheet = .print }
+            }
             .onReceive(NotificationCenter.default.publisher(for: .duoDemoPanel)) { n in
                 if let s = n.object as? String, let p = Panel(rawValue: s) { panel = p }
             }
@@ -258,6 +342,13 @@ struct ProjectView: View {
                 .padding(12)
             }
         }
+        .overlay(alignment: .bottomTrailing) {
+            if !pickFace {
+                PrintButton { sheet = .print }
+                    .padding(.trailing, 14)
+                    .padding(.bottom, 16)
+            }
+        }
         .overlay(alignment: .bottom) {
             if let n = model.notice {
                 Text(n)
@@ -265,7 +356,7 @@ struct ProjectView: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 14).padding(.vertical, 8)
                     .background(.thinMaterial, in: Capsule())
-                    .padding(.bottom, 56)
+                    .padding(.bottom, 72)
                     .padding(.horizontal, 24)
                     .transition(.opacity)
                     .allowsHitTesting(false)
@@ -277,12 +368,9 @@ struct ProjectView: View {
     }
 
     var panelPicker: some View {
-        Picker("Panel", selection: $panel) {
-            ForEach(Panel.allCases) { Text($0.rawValue).tag($0) }
-        }
-        .pickerStyle(.segmented)
-        .padding(.horizontal)
-        .padding(.vertical, 8)
+        PanelTabs(panel: $panel)
+            .padding(.horizontal)
+            .padding(.vertical, 6)
     }
 
     @ViewBuilder var panelContent: some View {
@@ -299,10 +387,7 @@ struct ProjectView: View {
         VStack(spacing: 0) {
             if menu {
                 HStack(spacing: 12) {
-                    Picker("Panel", selection: $panel) {
-                        ForEach(Panel.allCases) { Text($0.rawValue).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
+                    PanelTabs(panel: $panel)
                     moreMenu
                         .font(.title2)
                 }

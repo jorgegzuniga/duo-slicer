@@ -117,7 +117,9 @@ screenshots)
     if [ "$label" = duo ]; then  # the full set on the iPhone Duo
       shot "$label" "$udid" home -DuoDemo YES -DuoDemoHome YES -DuoDemoPrinter bambu-x1c
       shot "$label" "$udid" preview -DuoDemo YES -DuoDemoPrinter bambu-x1c -DuoDemoSlice YES -DuoDemoPanel preview
-      shot "$label" "$udid" settings -DuoDemo YES -DuoDemoPrinter snapmaker-u1 -DuoDemoPanel settings
+      shot "$label" "$udid" settings -DuoDemo YES -DuoDemoPrinter snapmaker-u1 -DuoDemoPanel settings -DuoDemoSettings easy
+      shot "$label" "$udid" settings-advanced -DuoDemo YES -DuoDemoPrinter bambu-x1c -DuoDemoPanel settings -DuoDemoSettings advanced -DuoDemoSettingsPage quality
+      shot "$label" "$udid" print-sheet -DuoDemo YES -DuoDemoPrinter bambu-x1c -DuoDemoSlice YES -DuoDemoPanel plate -DuoDemoSheet print
     fi
     DISPLAYS=""
     # keep the iPhone Duo running for the Claude end-to-end run
@@ -135,7 +137,9 @@ inner)
   shot "$label" "$udid" wide-plate -DuoDemo YES -DuoDemoPrinter bambu-x1c -DuoDemoPanel plate -DuoDemoInner wide -DuoDemoShowFold YES
   shot "$label" "$udid" wide-preview -DuoDemo YES -DuoDemoPrinter bambu-x1c -DuoDemoSlice YES -DuoDemoPanel preview -DuoDemoInner wide
   shot "$label" "$udid" wide-u1-print -DuoDemo YES -DuoDemoPrinter snapmaker-u1 -DuoDemoSlice YES -DuoDemoPanel print -DuoDemoInner wide
-  shot "$label" "$udid" wide-settings -DuoDemo YES -DuoDemoPrinter snapmaker-u1 -DuoDemoPanel settings -DuoDemoInner wide
+  shot "$label" "$udid" wide-settings -DuoDemo YES -DuoDemoPrinter snapmaker-u1 -DuoDemoPanel settings -DuoDemoSettings easy -DuoDemoInner wide
+  shot "$label" "$udid" wide-settings-advanced -DuoDemo YES -DuoDemoPrinter bambu-x1c -DuoDemoPanel settings -DuoDemoSettings advanced -DuoDemoSettingsPage speed -DuoDemoInner wide
+  shot "$label" "$udid" wide-print-sheet -DuoDemo YES -DuoDemoPrinter bambu-x1c -DuoDemoSlice YES -DuoDemoPanel plate -DuoDemoSheet print -DuoDemoInner wide
   shot "$label" "$udid" wide-home -DuoDemo YES -DuoDemoHome YES -DuoDemoPrinter bambu-x1c -DuoDemoInner wide
   shot "$label" "$udid" tall-plate -DuoDemo YES -DuoDemoPrinter bambu-x1c -DuoDemoPanel plate -DuoDemoInner tall -DuoDemoShowFold YES
   shot "$label" "$udid" tall-preview -DuoDemo YES -DuoDemoPrinter bambu-x1c -DuoDemoSlice YES -DuoDemoPanel preview -DuoDemoInner tall

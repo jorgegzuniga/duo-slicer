@@ -3,10 +3,7 @@ import SwiftUI
 struct PrintPanel: View {
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var printer: PrinterLink
-    @State private var mapping: [Int: Int] = [:]
     @State private var opts = StartOptions()
-    @State private var bedClear = false
-    @State private var sending = false
     @State private var sheet: PrintSheet?
     @State private var confirmStop = false
     @State private var showCamera = false
@@ -36,65 +33,14 @@ struct PrintPanel: View {
                 ToolheadSection(plate: p)
             }
 
-            if !model.sliceIsCurrent {
-                Section {
-                    SliceButton()
-                } footer: {
-                    Text(model.target.isToolChanger
-                         ? "Slice plate \(model.plate?.id ?? 0) for the \(model.target.shortName) with these heads, then send it from here."
-                         : "Slice plate \(model.plate?.id ?? 0) first; you'll pick spools and send it from here.")
-                }
-            } else if let s = model.slice {
-                if !model.target.isToolChanger {
-                    Section {
-                        ForEach(s.filaments ?? []) { f in
-                            HStack {
-                                Circle().fill(Color(hex: f.color)).frame(width: 14, height: 14)
-                                Text("F\(f.id) \(f.type)").font(.subheadline)
-                                Spacer()
-                                Picker("Spool", selection: Binding(get: { mapping[f.id] ?? 254 }, set: { mapping[f.id] = $0 })) {
-                                    ForEach(trayOptions) { t in
-                                        Text(t.loaded ? "\(t.label) · \(t.name)" : "\(t.label) · empty").tag(t.id)
-                                    }
-                                }
-                                .labelsHidden()
-                            }
-                        }
-                    } header: {
-                        Text("Spools")
-                    } footer: {
-                        Text(printer.trays.isEmpty ? "Connect the printer to see what's loaded in the AMS." : "Matched by colour and material. Change any you like.")
-                    }
-                    Section("Options") {
-                        Toggle("Auto bed leveling", isOn: $opts.bedLeveling)
-                        Toggle("Flow calibration", isOn: $opts.flowCalibration)
-                        Toggle("Vibration compensation", isOn: $opts.vibrationCalibration)
-                        Toggle("Timelapse", isOn: $opts.timelapse)
-                    }
-                }
-                Section {
-                    Toggle("The bed is clear and the \(shortBed(s.bedType ?? "")) is on", isOn: $bedClear)
-                    if let p = printer.uploadProgress {
-                        ProgressView(value: p) { Text("Uploading to the printer…").font(.footnote) }
-                    }
-                    Button {
-                        Task { await send() }
-                    } label: {
-                        Label(sending ? "Sending…" : "Print plate \(s.plateId ?? 0) on \(printer.activeModel?.shortName ?? "printer")", systemImage: "printer.fill")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .disabled(!bedClear || sending || !printer.connected || printer.isBusy)
-                    .keyboardShortcut("p", modifiers: .command)
-                    if !printer.isConfigured {
-                        Text("Add a printer to print over Wi-Fi, or share the sliced file from the ••• menu.").font(.footnote).foregroundStyle(.secondary)
-                    }
-                    if let r = printer.lastResult { Text(r).font(.footnote).foregroundStyle(.secondary) }
-                } footer: {
-                    Text(String(format: "%@ · %.1f g. The %@ heats, levels and cleans the nozzle for a few minutes before the first layer.",
-                                formatDuration(s.seconds ?? 0), s.grams ?? 0, model.target.shortName))
-                }
+            Section {
+                ReadyToPrintCard(open: { sheet = .print })
+                    .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
+                    .listRowBackground(Color.clear)
+            } footer: {
+                Text(model.target.isToolChanger
+                     ? "Slices plate \(model.plate?.id ?? 0) for the \(model.target.shortName) with these heads, then starts it with one tap."
+                     : "Slices plate \(model.plate?.id ?? 0) if needed, matches your AMS spools and starts it with one tap.")
             }
 
             Section {
@@ -113,40 +59,34 @@ struct PrintPanel: View {
         } message: {
             Text("It can't be resumed after stopping.")
         }
-        .onAppear(perform: remap)
-        .onChange(of: model.slice?.plateId) { _, _ in remap() }
-        .onChange(of: printer.trays) { _, _ in if mapping.isEmpty || mapping.values.allSatisfy({ $0 == 254 }) { remap() } }
     }
 
-    var trayOptions: [Tray] {
-        printer.trays.isEmpty ? [Tray(id: 254, label: "External spool", type: "", color: "", name: "", loaded: true)] : printer.trays
-    }
+}
 
-    func shortBed(_ b: String) -> String {
-        switch b {
-        case "Textured PEI Plate": return "textured PEI plate"
-        case "High Temp Plate": return "smooth PEI plate"
-        case "Supertack Plate": return "SuperTack plate"
-        case "Cool Plate": return "cool plate"
-        case "Engineering Plate": return "engineering plate"
-        case "Textured Cool Plate": return "textured cool plate"
-        default: return "plate"
-        }
-    }
+/// The Print tab's call to action: what the plate takes once sliced, and the button that opens the Print sheet.
+struct ReadyToPrintCard: View {
+    @EnvironmentObject var model: AppModel
+    @EnvironmentObject var printer: PrinterLink
+    let open: () -> Void
 
-    func remap() {
-        guard let s = model.slice else { return }
-        mapping = printer.suggestMapping(for: s.filaments ?? [])
-    }
-
-    func send() async {
-        sending = true
-        defer { sending = false }
-        do {
-            try await model.sendCurrentSlice(to: printer, mapping: mapping, options: opts)
-            bedClear = false
-        } catch {
-            model.errorMessage = error.localizedDescription
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if model.sliceIsCurrent, let s = model.slice {
+                HStack(spacing: 8) {
+                    StatTile(value: formatDuration(s.seconds ?? 0), label: "print time", icon: "clock")
+                    StatTile(value: String(format: "%.1f g", s.grams ?? 0), label: "filament", icon: "scalemass")
+                }
+            }
+            Button(action: open) {
+                Label(model.sliceIsCurrent ? "Print plate \(model.plate?.id ?? 0)" : "Slice & print plate \(model.plate?.id ?? 0)", systemImage: "printer.fill")
+            }
+            .buttonStyle(GradientButtonStyle())
+            .disabled(model.plate?.isEmpty ?? true || model.plate?.offBed == true)
+            .keyboardShortcut("p", modifiers: .command)
+            if model.plate?.offBed == true {
+                Label("Part of this plate is off the \(model.target.shortName)'s bed. Center it on the Plate tab.", systemImage: "exclamationmark.triangle.fill")
+                    .font(.footnote).foregroundStyle(.red)
+            }
         }
     }
 }

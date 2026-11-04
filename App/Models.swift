@@ -117,10 +117,16 @@ struct PrintOptions: Codable, Hashable {
     var colors: [String] = []         // hex per project filament
     var overrides: [String: String] = [:]
     var toolMap: [Int] = []           // tool changers: toolhead per project filament (-1 = choose automatically)
+    /// Changes to one filament's settings (temperatures, cooling, flow…), per project filament. Optional so print queues
+    /// saved before it existed still load.
+    var filamentOverrides: [[String: String]]? = nil
+
+    var hasFilamentOverrides: Bool { (filamentOverrides ?? []).contains { !$0.isEmpty } }
 
     func json(extra: [String: Any] = [:]) -> String {
         var d: [String: Any] = ["filaments": filaments, "colors": colors, "overrides": overrides]
         if !process.isEmpty { d["process"] = process }
+        if hasFilamentOverrides { d["filament_overrides"] = filamentOverrides ?? [] }
         if toolMap.contains(where: { $0 >= 0 }) { d["tool_map"] = toolMap }
         for (k, v) in extra { d[k] = v }
         let data = (try? JSONSerialization.data(withJSONObject: d)) ?? Data("{}".utf8)
